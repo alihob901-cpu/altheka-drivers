@@ -9,6 +9,11 @@
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&amp;display=swap" rel="stylesheet">
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"></script>
+  
   <style>
     html, body { height: 100%; margin: 0; }
     * { font-family: 'Tajawal', sans-serif; }
@@ -80,7 +85,6 @@
       color: #34d399;
       text-decoration: underline;
     }
-    /* أنيميشين للإشعارات */
     @keyframes pulse-ring {
       0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
       70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
@@ -99,6 +103,66 @@
   </style>
 </head>
 <body class="h-full bg-slate-950 text-slate-100">
+
+<script>
+// ============== إعدادات Firebase ==============
+const firebaseConfig = {
+  apiKey: "AIzaSyBBRW9XT2wdeBlKh9Fs50H68FUItv68Jbw",
+  authDomain: "trust-center-notifications.firebaseapp.com",
+  projectId: "trust-center-notifications",
+  storageBucket: "trust-center-notifications.firebasestorage.app",
+  messagingSenderId: "150648020047",
+  appId: "1:150648020047:web:c5051941de6f2e81ee9e3a",
+  measurementId: "G-L7S5XKN42N"
+};
+
+const VAPID_KEY = "BA2ONQejtLqvY0xKKIy0WaG3SAc1CCVm1xqvUhHI1gzxxlqGq65sGei8OroEqAK1haxQygk_2cp8Ugf-jyt3tWA";
+
+// تهيئة Firebase
+firebase.initializeApp(firebaseConfig);
+const messaging = firebase.messaging();
+
+// تهيئة الإشعارات
+async function initFirebaseNotifications() {
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      console.log('❌ لم يتم منح إذن الإشعارات');
+      return;
+    }
+    
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+    if (token) {
+      console.log('✅ FCM Token:', token);
+      localStorage.setItem('fcm_token', token);
+    }
+    
+    messaging.onMessage((payload) => {
+      console.log('📨 إشعار واصل:', payload);
+      if (typeof showToast === 'function') {
+        showToast(`🔔 ${payload.notification?.title}: ${payload.notification?.body}`);
+      }
+      if (typeof addNotification === 'function') {
+        addNotification(
+          payload.notification?.title || 'تنبيه',
+          payload.notification?.body || 'لديك إشعار جديد',
+          'firebase'
+        );
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ خطأ في تهيئة Firebase:', error);
+  }
+}
+
+// بدء التشغيل عند تحميل الصفحة
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    initFirebaseNotifications();
+  });
+}
+</script>
 
 <!-- Login Page -->
 <div id="loginPage" class="h-full w-full flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4">
@@ -173,13 +237,11 @@
         <h2 id="pageTitle" class="text-lg font-700">لوحة التحكم</h2>
       </div>
       <div class="flex items-center gap-3">
-        <!-- زر الإشعارات -->
         <div class="relative">
           <button id="notificationBtn" onclick="toggleNotifications()" class="relative p-2 rounded-lg hover:bg-slate-800 transition">
             <i data-lucide="bell" style="width:20px;height:20px"></i>
             <span id="notificationCount" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
           </button>
-          <!-- قائمة الإشعارات المنبثقة -->
           <div id="notificationPanel" class="absolute left-0 top-full mt-2 w-80 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 hidden max-h-96 overflow-y-auto">
             <div class="p-3 border-b border-slate-800 sticky top-0 bg-slate-900">
               <h3 class="font-bold text-amber-400">📢 الإشعارات</h3>
@@ -197,7 +259,6 @@
       </div>
     </header>
 
-    <!-- Admin Dashboard Page -->
     <div id="page-dashboard" class="page-content p-6 fade-in hidden">
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -243,7 +304,6 @@
       </div>
     </div>
 
-    <!-- Agent Dashboard Page -->
     <div id="page-agent-dashboard" class="page-content p-6 fade-in hidden">
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -279,7 +339,6 @@
       </div>
     </div>
 
-    <!-- Orders Page -->
     <div id="page-orders" class="page-content p-6 fade-in hidden">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div class="flex items-center gap-2">
@@ -305,7 +364,6 @@
       </div>
     </div>
 
-    <!-- Agents Page (Admin only) -->
     <div id="page-agents" class="page-content p-6 fade-in hidden">
       <div class="flex items-center justify-between mb-6">
         <h3 class="text-lg font-700">إدارة المندوبين</h3>
@@ -318,7 +376,6 @@
       </div>
     </div>
 
-    <!-- Customers Page -->
     <div id="page-customers" class="page-content p-6 fade-in hidden">
       <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <h3 class="font-700 mb-4">سجل العملاء</h3>
@@ -326,7 +383,6 @@
       </div>
     </div>
 
-    <!-- Inventory Page -->
     <div id="page-inventory" class="page-content p-6 fade-in hidden">
       <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center">
         <i data-lucide="package" style="width:48px;height:48px;color:#f59e0b" class="mx-auto mb-4"></i>
@@ -336,7 +392,6 @@
       </div>
     </div>
 
-    <!-- Reports Page -->
     <div id="page-reports" class="page-content p-6 fade-in hidden">
       <div class="grid gap-4 md:grid-cols-2">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-5"><h3 class="font-700 mb-4">ملخص المبيعات</h3><div id="reportSummary" class="space-y-3 text-sm"></div></div>
@@ -346,7 +401,6 @@
       <button onclick="exportCSV()" class="mt-4 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-sm flex items-center gap-2"><i data-lucide="download" style="width:16px;height:16px"></i> تصدير البيانات CSV</button>
     </div>
 
-    <!-- Settings Page -->
     <div id="page-settings" class="page-content p-6 fade-in hidden">
       <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 max-w-lg">
         <h3 class="font-700 mb-4">إعدادات العمولة</h3>
@@ -360,132 +414,26 @@
   </main>
 </div>
 
-<!-- New Order Modal -->
-<div id="orderModal" class="fixed inset-0 z-50 hidden">
-  <div class="modal-overlay absolute inset-0" onclick="closeOrderModal()"></div>
-  <div class="absolute inset-y-0 left-0 w-full max-w-md bg-slate-900 border-r border-slate-800 overflow-auto shadow-2xl">
-    <div class="p-5 border-b border-slate-800 flex justify-between"><h3 class="font-700 text-lg">➕ طلب جديد</h3><button onclick="closeOrderModal()"><i data-lucide="x"></i></button></div>
-    <form id="orderForm" onsubmit="handleOrderSubmit(event)" class="p-5 space-y-4">
-      <div><label class="block text-sm text-slate-400 mb-1">👤 اسم الزبون</label><input id="f_name" required placeholder="أدخل اسم الزبون" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div><label class="block text-sm text-slate-400 mb-1">📞 رقم الهاتف</label><input id="f_phone" required placeholder="أدخل رقم الهاتف" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div><label class="block text-sm text-slate-400 mb-1">📍 العنوان</label><input id="f_address" required placeholder="أدخل العنوان" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div><label class="block text-sm text-slate-400 mb-1">📦 المنتج</label><input id="f_product" required placeholder="اسم المنتج" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div class="grid grid-cols-2 gap-3">
-        <div><label class="block text-sm text-slate-400 mb-1">🔢 الكمية</label><input id="f_qty" type="number" value="1" placeholder="الكمية" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-        <div><label class="block text-sm text-slate-400 mb-1">💰 السعر (د.ع)</label><input id="f_price" type="number" required placeholder="السعر" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      </div>
-      <div><label class="block text-sm text-slate-400 mb-1">📅 التاريخ</label><input id="f_date" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div><label class="block text-sm text-slate-400 mb-1">📌 ملاحظة (اختياري)</label><textarea id="f_note" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 resize-none" placeholder="أضف ملاحظة للطلب..."></textarea></div>
-      <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-3 rounded-lg font-700 mt-4">💾 حفظ الطلب</button>
-    </form>
-  </div>
-</div>
+<!-- Modals -->
+<div id="orderModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeOrderModal()"></div><div class="absolute inset-y-0 left-0 w-full max-w-md bg-slate-900 border-r border-slate-800 overflow-auto shadow-2xl"><div class="p-5 border-b border-slate-800 flex justify-between"><h3 class="font-700 text-lg">➕ طلب جديد</h3><button onclick="closeOrderModal()"><i data-lucide="x"></i></button></div><form id="orderForm" onsubmit="handleOrderSubmit(event)" class="p-5 space-y-4"><div><label class="block text-sm text-slate-400 mb-1">👤 اسم الزبون</label><input id="f_name" required placeholder="أدخل اسم الزبون" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📞 رقم الهاتف</label><input id="f_phone" required placeholder="أدخل رقم الهاتف" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📍 العنوان</label><input id="f_address" required placeholder="أدخل العنوان" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📦 المنتج</label><input id="f_product" required placeholder="اسم المنتج" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div class="grid grid-cols-2 gap-3"><div><label class="block text-sm text-slate-400 mb-1">🔢 الكمية</label><input id="f_qty" type="number" value="1" placeholder="الكمية" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">💰 السعر (د.ع)</label><input id="f_price" type="number" required placeholder="السعر" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div></div><div><label class="block text-sm text-slate-400 mb-1">📅 التاريخ</label><input id="f_date" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📌 ملاحظة (اختياري)</label><textarea id="f_note" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 resize-none" placeholder="أضف ملاحظة للطلب..."></textarea></div><button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-3 rounded-lg font-700 mt-4">💾 حفظ الطلب</button></form></div></div>
 
-<!-- Edit Order Date Modal -->
-<div id="editDateModal" class="fixed inset-0 z-50 hidden">
-  <div class="modal-overlay absolute inset-0" onclick="closeEditDateModal()"></div>
-  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl">
-    <h3 class="font-700 text-lg mb-4">📅 تعديل تاريخ الطلب</h3>
-    <p id="editDateCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p>
-    <input id="editDateInput" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 mb-4">
-    <div class="flex gap-3">
-      <button onclick="closeEditDateModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button>
-      <button onclick="confirmEditDate()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ</button>
-    </div>
-  </div>
-</div>
+<div id="editDateModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditDateModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl"><h3 class="font-700 text-lg mb-4">📅 تعديل تاريخ الطلب</h3><p id="editDateCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p><input id="editDateInput" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 mb-4"><div class="flex gap-3"><button onclick="closeEditDateModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button onclick="confirmEditDate()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ</button></div></div></div>
 
-<!-- Add Agent Modal -->
-<div id="agentModal" class="fixed inset-0 z-50 hidden">
-  <div class="modal-overlay absolute inset-0" onclick="closeAgentModal()"></div>
-  <div class="absolute inset-y-0 left-0 w-full max-w-md bg-slate-900 border-r border-slate-800 overflow-auto shadow-2xl">
-    <div class="p-5 border-b border-slate-800 flex justify-between"><h3 id="agentModalTitle" class="font-700 text-lg">➕ إضافة مندوب</h3><button onclick="closeAgentModal()"><i data-lucide="x"></i></button></div>
-    <form id="agentForm" onsubmit="handleAgentSubmit(event)" class="p-5 space-y-4">
-      <div><label class="block text-sm text-slate-400 mb-1">👤 اسم المندوب</label><input id="agent_name" required placeholder="اسم المندوب" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div><label class="block text-sm text-slate-400 mb-1">📞 رقم الهاتف</label><input id="agent_phone" required placeholder="رقم الهاتف" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div><label class="block text-sm text-slate-400 mb-1">🔑 كود المندوب</label><input id="agent_code" required placeholder="كود المندوب" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div><label class="block text-sm text-slate-400 mb-1">🔒 كلمة المرور</label><input id="agent_password" type="password" required placeholder="كلمة المرور" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div><label class="block text-sm text-slate-400 mb-1">💰 الربح من كل طلب (د.ع)</label><input id="agent_profit_per_order" type="number" value="0" placeholder="الربح من كل طلب" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-700">💾 حفظ المندوب</button>
-    </form>
-  </div>
-</div>
+<div id="agentModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeAgentModal()"></div><div class="absolute inset-y-0 left-0 w-full max-w-md bg-slate-900 border-r border-slate-800 overflow-auto shadow-2xl"><div class="p-5 border-b border-slate-800 flex justify-between"><h3 id="agentModalTitle" class="font-700 text-lg">➕ إضافة مندوب</h3><button onclick="closeAgentModal()"><i data-lucide="x"></i></button></div><form id="agentForm" onsubmit="handleAgentSubmit(event)" class="p-5 space-y-4"><div><label class="block text-sm text-slate-400 mb-1">👤 اسم المندوب</label><input id="agent_name" required placeholder="اسم المندوب" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📞 رقم الهاتف</label><input id="agent_phone" required placeholder="رقم الهاتف" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">🔑 كود المندوب</label><input id="agent_code" required placeholder="كود المندوب" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">🔒 كلمة المرور</label><input id="agent_password" type="password" required placeholder="كلمة المرور" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">💰 الربح من كل طلب (د.ع)</label><input id="agent_profit_per_order" type="number" value="0" placeholder="الربح من كل طلب" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-700">💾 حفظ المندوب</button></form></div></div>
 
-<!-- Edit Agent Modal -->
-<div id="editAgentModal" class="fixed inset-0 z-50 hidden">
-  <div class="modal-overlay absolute inset-0" onclick="closeEditAgentModal()"></div>
-  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl">
-    <h3 class="font-700 text-lg mb-4">✏️ تعديل بيانات المندوب</h3>
-    <div class="space-y-3">
-      <div class="bg-slate-800 rounded-lg p-3"><p class="text-slate-400 text-sm">🆔 كود المندوب</p><p id="editAgentId" class="text-white font-bold">-</p></div>
-      <div class="bg-slate-800 rounded-lg p-3"><p class="text-slate-400 text-sm">👤 اسم المندوب</p><p id="editAgentName" class="text-white font-bold">-</p></div>
-      <div class="bg-slate-800 rounded-lg p-3"><p class="text-slate-400 text-sm">🔑 كود الدخول</p><p id="editAgentCode" class="text-white font-bold">-</p></div>
-      <div><label class="block text-slate-400 text-sm mb-1">💰 الربح من كل طلب (د.ع)</label><input id="editAgentProfit" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-    </div>
-    <div class="flex gap-3 mt-6"><button onclick="closeEditAgentModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg">إلغاء</button><button onclick="saveEditAgent()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ التعديلات</button></div>
-  </div>
-</div>
+<div id="editAgentModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditAgentModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl"><h3 class="font-700 text-lg mb-4">✏️ تعديل بيانات المندوب</h3><div class="space-y-3"><div class="bg-slate-800 rounded-lg p-3"><p class="text-slate-400 text-sm">🆔 كود المندوب</p><p id="editAgentId" class="text-white font-bold">-</p></div><div class="bg-slate-800 rounded-lg p-3"><p class="text-slate-400 text-sm">👤 اسم المندوب</p><p id="editAgentName" class="text-white font-bold">-</p></div><div class="bg-slate-800 rounded-lg p-3"><p class="text-slate-400 text-sm">🔑 كود الدخول</p><p id="editAgentCode" class="text-white font-bold">-</p></div><div><label class="block text-slate-400 text-sm mb-1">💰 الربح من كل طلب (د.ع)</label><input id="editAgentProfit" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div></div><div class="flex gap-3 mt-6"><button onclick="closeEditAgentModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg">إلغاء</button><button onclick="saveEditAgent()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ التعديلات</button></div></div></div>
 
-<!-- Edit Note Modal (للمندوب تعديل ملاحظة الطلب) -->
-<div id="editNoteModal" class="fixed inset-0 z-50 hidden">
-  <div class="modal-overlay absolute inset-0" onclick="closeEditNoteModal()"></div>
-<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl">
-    <h3 class="font-700 text-lg mb-4">📌 تعديل ملاحظة الطلب</h3>
-    <p id="editNoteCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p>
-    <textarea id="editNoteInput" rows="4" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 resize-none mb-4" placeholder="أضف ملاحظة للإدارة..."></textarea>
-    <div class="flex gap-3">
-      <button onclick="closeEditNoteModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button>
-      <button onclick="confirmEditNote()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ الملاحظة</button>
-    </div>
-  </div>
-</div>
+<div id="editNoteModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditNoteModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl"><h3 class="font-700 text-lg mb-4">📌 تعديل ملاحظة الطلب</h3><p id="editNoteCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p><textarea id="editNoteInput" rows="4" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 resize-none mb-4" placeholder="أضف ملاحظة للإدارة..."></textarea><div class="flex gap-3"><button onclick="closeEditNoteModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button onclick="confirmEditNote()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ الملاحظة</button></div></div></div>
 
-<!-- Add Notes Modal (قديم - سنحتفظ به للتوافق) -->
-<div id="addNotesModal" class="fixed inset-0 z-50 hidden">
-  <div class="modal-overlay absolute inset-0" onclick="closeAddNotesModal()"></div>
-  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl">
-    <h3 class="font-700 text-lg mb-4">📌 إضافة ملاحظة</h3>
-    <textarea id="addNotesInput" rows="4" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 resize-none mb-4" placeholder="أضف ملاحظة للإدارة..."></textarea>
-    <div class="flex gap-3"><button onclick="closeAddNotesModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg">إلغاء</button><button onclick="submitAddNotes()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">إرسال</button></div>
-  </div>
-</div>
+<div id="addNotesModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeAddNotesModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl"><h3 class="font-700 text-lg mb-4">📌 إضافة ملاحظة</h3><textarea id="addNotesInput" rows="4" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 resize-none mb-4" placeholder="أضف ملاحظة للإدارة..."></textarea><div class="flex gap-3"><button onclick="closeAddNotesModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg">إلغاء</button><button onclick="submitAddNotes()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">إرسال</button></div></div></div>
 
-<!-- Delete Confirm Modal -->
-<div id="deleteConfirm" class="fixed inset-0 z-50 hidden">
-  <div class="modal-overlay absolute inset-0" onclick="closeDeleteConfirm()"></div>
-  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80 text-center">
-    <i data-lucide="trash-2" style="width:40px;height:40px;color:#ef4444" class="mx-auto mb-3"></i>
-    <p id="deleteConfirmText" class="font-700 mb-4">حذف العنصر؟</p>
-    <div class="flex gap-3"><button onclick="closeDeleteConfirm()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button id="confirmDeleteBtn" onclick="confirmDelete()" class="flex-1 bg-red-600 hover:bg-red-700 py-2 rounded-lg">حذف</button></div>
-  </div>
-</div>
+<div id="deleteConfirm" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeDeleteConfirm()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80 text-center"><i data-lucide="trash-2" style="width:40px;height:40px;color:#ef4444" class="mx-auto mb-3"></i><p id="deleteConfirmText" class="font-700 mb-4">حذف العنصر؟</p><div class="flex gap-3"><button onclick="closeDeleteConfirm()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button id="confirmDeleteBtn" onclick="confirmDelete()" class="flex-1 bg-red-600 hover:bg-red-700 py-2 rounded-lg">حذف</button></div></div></div>
 
-<!-- Status Change Modal -->
-<div id="statusModal" class="fixed inset-0 z-50 hidden">
-  <div class="modal-overlay absolute inset-0" onclick="closeStatusModal()"></div>
-  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80">
-    <p class="font-700 mb-3">🔔 تغيير حالة الطلب</p>
-    <div id="statusOptions" class="space-y-2"></div>
-  </div>
-</div>
+<div id="statusModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeStatusModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80"><p class="font-700 mb-3">🔔 تغيير حالة الطلب</p><div id="statusOptions" class="space-y-2"></div></div></div>
 
-<!-- Edit Profit Modal -->
-<div id="editProfitModal" class="fixed inset-0 z-50 hidden">
-  <div class="modal-overlay absolute inset-0" onclick="closeEditProfitModal()"></div>
-  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96">
-    <h3 class="font-700 text-lg mb-4">💰 تعديل الربح</h3>
-    <p id="editProfitCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p>
-    <input id="editProfitInput" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 mb-4" placeholder="أدخل مبلغ الربح">
-    <div class="flex gap-3"><button onclick="closeEditProfitModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button onclick="confirmEditProfit()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ</button></div>
-  </div>
-</div>
+<div id="editProfitModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditProfitModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96"><h3 class="font-700 text-lg mb-4">💰 تعديل الربح</h3><p id="editProfitCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p><input id="editProfitInput" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 mb-4" placeholder="أدخل مبلغ الربح"><div class="flex gap-3"><button onclick="closeEditProfitModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button onclick="confirmEditProfit()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ</button></div></div></div>
 
-<!-- Toast -->
-<div id="toast" class="fixed top-4 left-4 z-[100] hidden">
-  <div class="bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm toast-show flex items-center gap-2">
-    <i data-lucide="check-circle" style="width:18px;height:18px"></i> <span id="toastMsg"></span>
-  </div>
-</div>
+<div id="toast" class="fixed top-4 left-4 z-[100] hidden"><div class="bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm toast-show flex items-center gap-2"><i data-lucide="check-circle" style="width:18px;height:18px"></i> <span id="toastMsg"></span></div></div>
 
 <script>
 // ============== STATE ==============
@@ -506,6 +454,22 @@ let editingNoteOrderId = null;
 let notifications = [];
 let lastDataHash = null;
 let notificationPanelOpen = false;
+
+function saveNotificationsToStorage() {
+    localStorage.setItem('trust_system_notifications', JSON.stringify(notifications));
+}
+
+function loadNotificationsFromStorage() {
+    const stored = localStorage.getItem('trust_system_notifications');
+    if (stored) {
+        try {
+            notifications = JSON.parse(stored);
+            updateNotificationUI();
+        } catch(e) {
+            console.log("خطأ في تحميل الإشعارات المحفوظة");
+        }
+    }
+}
 
 function generateDataHash() {
   return JSON.stringify(allOrders.map(o => ({
@@ -528,10 +492,10 @@ function addNotification(title, message, type, orderId = null) {
     orderId: orderId,
     read: false
   };
-  // إضافة الإشعار في البداية (الأحدث أولاً)
   notifications.unshift(newNotification);
   if (notifications.length > 50) notifications.pop();
   updateNotificationUI();
+  saveNotificationsToStorage();
   if (!notificationPanelOpen) {
     const btn = document.getElementById('notificationBtn');
     if (btn) {
@@ -559,7 +523,6 @@ function updateNotificationUI() {
       listEl.innerHTML = '<div class="p-4 text-center text-slate-500">📭 لا توجد إشعارات</div>';
       return;
     }
-    // عرض الإشعارات من الأحدث إلى الأقدم (كما هي في المصفوفة)
     listEl.innerHTML = notifications.map(n => `
       <div class="notification-item p-3 hover:bg-slate-800/50 transition cursor-pointer ${!n.read ? 'bg-slate-800/30' : ''}" onclick="markNotificationRead(${n.id})">
         <div class="flex items-start gap-2">
@@ -581,6 +544,7 @@ function markNotificationRead(id) {
   if (notification) {
     notification.read = true;
     updateNotificationUI();
+    saveNotificationsToStorage();
   }
   if (notification && notification.orderId) {
     closeNotifications();
@@ -591,11 +555,13 @@ function markNotificationRead(id) {
 function markAllNotificationsRead() {
   notifications.forEach(n => n.read = true);
   updateNotificationUI();
+  saveNotificationsToStorage();
 }
 
 function clearAllNotifications() {
   notifications = [];
   updateNotificationUI();
+  localStorage.removeItem('trust_system_notifications');
   showToast('🗑️ تم مسح جميع الإشعارات');
 }
 
@@ -618,7 +584,6 @@ function closeNotifications() {
   }
 }
 
-// إغلاق لوحة الإشعارات عند النقر خارجها
 document.addEventListener('click', function(e) {
   const panel = document.getElementById('notificationPanel');
   const btn = document.getElementById('notificationBtn');
@@ -628,7 +593,6 @@ document.addEventListener('click', function(e) {
   }
 });
 
-// مراقبة التغييرات في البيانات
 function checkForDataChanges() {
   if (!allOrders.length && !allAgents.length) return;
   const currentHash = generateDataHash();
@@ -677,7 +641,6 @@ const dataHandler = {
   }
 };
 
-// ربط مراقبة التغييرات بعد تعريف dataHandler
 const originalOnDataChanged = dataHandler.onDataChanged;
 dataHandler.onDataChanged = function(data) {
   originalOnDataChanged(data);
@@ -686,7 +649,6 @@ dataHandler.onDataChanged = function(data) {
 
 window.dataSdk.init(dataHandler);
 
-// ============== تأثيرات الزهور ==============
 function createFlowersFromTop() {
   const flowers = ['🌸', '🌼', '🌻', '🌺', '🌸', '🌷', '🌹', '🌸', '🌼', '🌻', '💐', '🌸'];
   const numberOfFlowers = 40;
@@ -734,7 +696,6 @@ function createBalloonsAndFlowers() {
   }
 }
 
-// ============== عرض معلومات المبرمج ==============
 function showProgrammerInfo() {
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-[200] flex items-center justify-center p-4';
@@ -791,7 +752,6 @@ function copyToClipboard(text) {
   navigator.clipboard.writeText(text).then(() => showToast(`✅ تم نسخ: ${text}`)).catch(() => showToast('❌ فشل النسخ'));
 }
 
-// ============== إغلاق القائمة عند النقر خارجها ==============
 document.addEventListener('click', function(event) {
   const sidebar = document.getElementById('sidebar');
   const menuButton = document.querySelector('button[onclick="toggleSidebar()"]');
@@ -802,7 +762,6 @@ document.addEventListener('click', function(event) {
   }
 });
 
-// ============== تحديث تلقائي مخفي (كل 10 ثواني) ==============
 let autoRefreshInterval = null;
 function startAutoRefresh() {
   if (autoRefreshInterval) clearInterval(autoRefreshInterval);
@@ -815,7 +774,6 @@ function startAutoRefresh() {
 }
 startAutoRefresh();
 
-// ============== LOGIN ==============
 async function handleLogin(e) {
   e.preventDefault();
   const username = document.getElementById('loginUsername').value.trim();
@@ -910,7 +868,6 @@ function switchPage(page) {
 
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('hidden'); }
 
-// ============== DASHBOARD ==============
 function updateDashboard() {
   if (isAgentMode && currentUser) updateAgentDashboard();
   else updateAdminDashboard();
@@ -962,7 +919,6 @@ function updateAdminDashboard() {
   else perfEl.innerHTML = names.map(name => { const a = agents[name]; const rate = a.total ? Math.round((a.delivered / a.total) * 100) : 0; return `<div class="flex justify-between py-2 border-b border-slate-800"><div><p class="font-500">${escapeHtml(name)}</p><p class="text-xs">${a.total} طلب</p></div><div class="text-left"><p class="text-emerald-400">${a.sales.toLocaleString('ar-IQ')} د.ع</p><p class="text-xs">نسبة ${rate}%</p></div></div>`; }).join('');
 }
 
-// ============== ORDERS ==============
 function renderOrders() {
   const statusFilter = document.getElementById('filterStatus')?.value || 'all';
   const search = document.getElementById('searchOrders')?.value.toLowerCase() || '';
@@ -972,7 +928,7 @@ function renderOrders() {
   filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const tbody = document.getElementById('ordersTableBody');
   if (!tbody) return;
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات</td><\/tr>'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات<\/td><\/tr>'; return; }
   tbody.innerHTML = filtered.map((o, i) => {
     let actionsHtml = '';
     if (!isAgentMode) {
@@ -1041,7 +997,6 @@ function escapeHtml(str) {
   });
 }
 
-// ============== AGENTS ==============
 function renderAgents() {
   const container = document.getElementById('agentsList');
   if (!container) return;
@@ -1144,7 +1099,6 @@ async function handleAgentSubmit(e) {
   } else showToast('❌ حدث خطأ'); 
 }
 
-// ============== CUSTOMERS ==============
 function renderCustomers() {
   const customers = {};
   allOrders.forEach(o => { const key = o.customer_phone; if (!customers[key]) customers[key] = { name: o.customer_name, phone: o.customer_phone, address: o.customer_address, orders: 0, total: 0 }; customers[key].orders++; if (o.status === 'واصل') customers[key].total += (o.total || 0); });
@@ -1152,10 +1106,9 @@ function renderCustomers() {
   if (!el) return;
   const keys = Object.keys(customers);
   if (!keys.length) { el.innerHTML = '<div class="text-center text-slate-600 p-8">👥 لا يوجد عملاء</div>'; return; }
-  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"></tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
+  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
 }
 
-// ============== INVENTORY ==============
 function renderInventory() {
   const products = {};
   allOrders.forEach(o => { if (!products[o.product]) products[o.product] = { sold: 0, returned: 0 }; if (o.status === 'واصل') products[o.product].sold += (o.quantity || 1); if (o.status === 'راجع') products[o.product].returned += (o.quantity || 1); });
@@ -1166,7 +1119,6 @@ function renderInventory() {
   el.innerHTML = names.map(name => `<div class="flex justify-between items-center bg-slate-800/50 rounded-lg p-3 mb-2"><span class="font-500">${escapeHtml(name)}</span><div class="flex gap-4"><span class="text-emerald-400">📤 مباع: ${products[name].sold}</span><span class="text-red-400">📥 مرتجع: ${products[name].returned}</span></div><\/div>`).join('');
 }
 
-// ============== REPORTS ==============
 function renderReports() {
   const delivered = allOrders.filter(o => o.status === 'واصل');
   const totalSales = delivered.reduce((s, o) => s + (o.total || 0), 0);
@@ -1186,7 +1138,6 @@ function renderReports() {
 }
 function exportCSV() { if (!allOrders.length) { showToast('لا توجد بيانات'); return; } const headers = ['الزبون','الهاتف','العنوان','المنتج','الكمية','السعر','الإجمالي','المندوب','التاريخ','الحالة','الملاحظات']; const rows = allOrders.map(o => [o.customer_name, o.customer_phone, o.customer_address, o.product, o.quantity, o.price, o.total, o.agent_name, o.order_date || '', o.status, o.admin_notes || '']); const csv = '\uFEFF' + [headers, ...rows].map(r => r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'orders.csv'; a.click(); showToast('📥 تم التصدير'); }
 
-// ============== ORDER MODAL ==============
 function showNewOrderModal() { 
   document.getElementById('orderModal').classList.remove('hidden'); 
   document.getElementById('orderForm').reset(); 
@@ -1206,7 +1157,6 @@ async function handleOrderSubmit(e) {
   const total = qty * price; 
   let agentName = 'مندوب';
   if (isAgentMode && currentUser) agentName = (currentUser.agent_name || '').trim();
-  // حساب الربح بناءً على الكمية: الربح الأساسي × الكمية
   const baseProfit = isAgentMode && currentUser ? (currentUser.agent_profit_per_order || 0) : 0;
   const profit = baseProfit * qty;
   const orderDate = document.getElementById('f_date').value || new Date().toISOString().split('T')[0];
@@ -1231,7 +1181,6 @@ async function handleOrderSubmit(e) {
   btn.textContent = 'حفظ الطلب'; 
   if (result.isOk) { 
     closeOrderModal(); 
-    // إرسال إشعار للمدير عند إضافة طلب جديد (حتى لو كان المندوب هو من أضافه)
     if (currentUser && (!isAgentMode || (isAgentMode && currentUser.type !== 'admin'))) {
       addNotification('طلب جديد', `تم إضافة طلب جديد للزبون ${document.getElementById('f_name').value.trim()} (الكمية: ${qty})`, 'order', result.data.__backendId);
     }
@@ -1239,7 +1188,6 @@ async function handleOrderSubmit(e) {
   } else showToast('❌ حدث خطأ'); 
 }
 
-// ============== EDIT DATE ==============
 function editOrderDate(id) { 
   const order = allOrders.find(o => o.__backendId === id); 
   if (!order) return; 
@@ -1263,7 +1211,6 @@ async function confirmEditDate() {
   showToast(result.isOk ? '✅ تم تحديث التاريخ' : '❌ حدث خطأ'); 
 }
 
-// ============== EDIT NOTE (للمندوب) ==============
 function editOrderNote(id) { 
   const order = allOrders.find(o => o.__backendId === id); 
   if (!order) return; 
@@ -1291,7 +1238,6 @@ async function confirmEditNote() {
   } else showToast('❌ حدث خطأ'); 
 }
 
-// ============== DELETE ==============
 function openDeleteConfirm(id, type) { 
   event.stopPropagation();
   if (type === 'order') pendingDeleteRecord = allOrders.find(o => o.__backendId === id); 
@@ -1302,7 +1248,6 @@ function openDeleteConfirm(id, type) {
 function closeDeleteConfirm() { document.getElementById('deleteConfirm').classList.add('hidden'); pendingDeleteRecord = null; }
 async function confirmDelete() { if (!pendingDeleteRecord) return; const result = await window.dataSdk.delete(pendingDeleteRecord); closeDeleteConfirm(); showToast(result.isOk ? '✅ تم الحذف' : '❌ حدث خطأ'); }
 
-// ============== STATUS CHANGE ==============
 function openStatusModal(id) { 
   if (isAgentMode) { 
     showToast('🔒 غير مسموح للمندوبين'); 
@@ -1332,21 +1277,19 @@ async function changeStatus(newStatus) {
   showToast(result.isOk ? `✅ تم التغيير إلى ${newStatus}` : '❌ حدث خطأ'); 
 }
 
-// ============== EDIT PROFIT ==============
 function editOrderProfit(id) { const order = allOrders.find(o => o.__backendId === id); if (!order) return; editingProfitOrderId = id; document.getElementById('editProfitCustomer').textContent = `👤 الزبون: ${order.customer_name}`; document.getElementById('editProfitInput').value = order.profit || 0; document.getElementById('editProfitModal').classList.remove('hidden'); }
 function closeEditProfitModal() { document.getElementById('editProfitModal').classList.add('hidden'); editingProfitOrderId = null; }
 async function confirmEditProfit() { if (!editingProfitOrderId) return; const order = allOrders.find(o => o.__backendId === editingProfitOrderId); if (!order) return; const newProfit = parseFloat(document.getElementById('editProfitInput').value) || 0; const result = await window.dataSdk.update({ ...order, profit: newProfit }); closeEditProfitModal(); showToast(result.isOk ? '✅ تم تحديث الربح' : '❌ حدث خطأ'); }
 
-// ============== NOTES (قديم للتوافق) ==============
 function openAddNotesModal(id) { pendingNotesOrderId = id; document.getElementById('addNotesInput').value = ''; document.getElementById('addNotesModal').classList.remove('hidden'); }
 function closeAddNotesModal() { document.getElementById('addNotesModal').classList.add('hidden'); pendingNotesOrderId = null; }
 async function submitAddNotes() { if (!pendingNotesOrderId) return; const order = allOrders.find(o => o.__backendId === pendingNotesOrderId); if (!order) return; const notes = document.getElementById('addNotesInput').value.trim(); if (!notes) { closeAddNotesModal(); return; } const timestamp = new Date().toLocaleString('ar-IQ'); const newNotes = order.admin_notes ? `${order.admin_notes}\n[${timestamp}] ${currentUser?.agent_name}: ${notes}` : `[${timestamp}] ${currentUser?.agent_name}: ${notes}`; const result = await window.dataSdk.update({ ...order, admin_notes: newNotes }); if (result.isOk) { closeAddNotesModal(); if (!isAgentMode && currentUser) {
   addNotification('ملاحظة جديدة', `تم إضافة ملاحظة لطلب ${order.customer_name}`, 'note', order.__backendId);
 } showToast('✅ تم إرسال الملاحظات'); } else showToast('❌ حدث خطأ'); }
 
-// ============== TOAST ==============
 function showToast(msg) { const toast = document.getElementById('toast'); document.getElementById('toastMsg').textContent = msg; toast.classList.remove('hidden'); setTimeout(() => toast.classList.add('hidden'), 2500); }
 
+loadNotificationsFromStorage();
 lucide.createIcons();
 </script>
 </body>
