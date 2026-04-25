@@ -1,1 +1,6 @@
-﻿Flask==2.3.3
+﻿Flask
+Werkzeug
+gunicorn
+psycopg2-binary
+supabase
+boto3
