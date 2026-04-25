@@ -201,6 +201,71 @@ def health_check():
         "timestamp": datetime.now().isoformat()
     }), 200
 
+
+# ============== API الإشعارات ==============
+
+@app.route('/api/notifications', methods=['GET'])
+def get_notifications():
+    """جلب جميع الإشعارات"""
+    try:
+        if not supabase:
+            return jsonify([]), 500
+        result = supabase.table('notifications').select('*').order('created_at', desc=True).execute()
+        return jsonify(result.data if result.data else [])
+    except Exception as e:
+        print(f"API Error GET Notifications: {e}")
+        return jsonify([]), 500
+
+@app.route('/api/notifications', methods=['POST'])
+def add_notification():
+    """إضافة إشعار جديد"""
+    try:
+        new_item = request.json
+        if not new_item:
+            return jsonify({"isOk": False, "error": "No data"}), 400
+        
+        if not supabase:
+            return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
+        
+        result = supabase.table('notifications').insert(new_item).execute()
+        
+        if result.data:
+            return jsonify({'isOk': True, 'data': result.data[0]}), 201
+        return jsonify({'isOk': False, 'error': 'Failed to save'}), 500
+    except Exception as e:
+        print(f"API Error POST Notification: {e}")
+        return jsonify({"isOk": False, "error": str(e)}), 500
+
+@app.route('/api/notifications/<notification_id>/read', methods=['PUT'])
+def mark_notification_read(notification_id):
+    """تحديث إشعار كمقروء"""
+    try:
+        if not supabase:
+            return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
+        
+        result = supabase.table('notifications').update({'read': True}).eq('_id', notification_id).execute()
+        
+        if result.data:
+            return jsonify({'isOk': True})
+        return jsonify({'isOk': False, 'error': 'Not found'}), 404
+    except Exception as e:
+        print(f"API Error Mark Read: {e}")
+        return jsonify({"isOk": False, "error": str(e)}), 500
+
+@app.route('/api/notifications', methods=['DELETE'])
+def delete_all_notifications():
+    """حذف جميع الإشعارات"""
+    try:
+        if not supabase:
+            return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
+        
+        supabase.table('notifications').delete().neq('id', 0).execute()
+        return jsonify({'isOk': True})
+    except Exception as e:
+        print(f"API Error Delete Notifications: {e}")
+        return jsonify({"isOk": False, "error": str(e)}), 500
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print("=" * 50)
