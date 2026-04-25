@@ -24,7 +24,7 @@ except Exception as e:
     supabase = None
 
 def get_all_data():
-    """جلب جميع البيانات من Supabase"""
+    """جلب جميع البيانات من Supabase مع ضمان وجود حقل type"""
     try:
         if not supabase:
             print("⚠️ Supabase غير متصل")
@@ -33,14 +33,23 @@ def get_all_data():
         print("📥 جلب الطلبات من Supabase...")
         orders_response = supabase.table('orders').select('*').execute()
         orders = orders_response.data if orders_response.data else []
+        
+        # إضافة حقل type للطلبات
+        for order in orders:
+            order['type'] = 'order'
         print(f"📦 تم جلب {len(orders)} طلب")
         
         print("👥 جلب المندوبين من Supabase...")
         agents_response = supabase.table('agents').select('*').execute()
         agents = agents_response.data if agents_response.data else []
+        
+        # إضافة حقل type للمندوبين
+        for agent in agents:
+            agent['type'] = 'agent'
         print(f"👤 تم جلب {len(agents)} مندوب")
         
         all_data = orders + agents
+        print(f"✅ إجمالي البيانات: {len(all_data)} عنصر")
         return all_data
     except Exception as e:
         print(f"❌ خطأ في جلب البيانات: {e}")
@@ -54,7 +63,7 @@ def get_data():
         return jsonify(data)
     except Exception as e:
         print(f"API Error GET: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify([]), 500
 
 @app.route('/api/data', methods=['POST'])
 def add_data():
@@ -71,7 +80,7 @@ def add_data():
         new_item['__backendId'] = str(int(datetime.now().timestamp() * 1000))
         new_item['created_at'] = datetime.now().isoformat()
         
-        # تحديد الجدول المناسب
+        # تحديد الجدول المناسب والتأكد من وجود type
         if new_item.get('type') == 'agent':
             table_name = 'agents'
         else:
@@ -79,13 +88,18 @@ def add_data():
             new_item['type'] = 'order'
         
         print(f"📝 إضافة إلى جدول {table_name}: {new_item.get('customer_name', new_item.get('agent_name', 'غير معروف'))}")
+        print(f"📋 البيانات المرسلة: {new_item}")
         
         # إدراج البيانات في Supabase
         result = supabase.table(table_name).insert(new_item).execute()
         
         if result.data:
             print(f"✅ تمت الإضافة بنجاح، ID: {result.data[0].get('__backendId')}")
-            return jsonify({'isOk': True, 'data': result.data[0]}), 201
+            # تأكد من أن البيانات المرجعة تحتوي على حقل type
+            returned_data = result.data[0]
+            if 'type' not in returned_data:
+                returned_data['type'] = table_name[:-1] if table_name != 'orders' else 'order'
+            return jsonify({'isOk': True, 'data': returned_data}), 201
         else:
             print("❌ فشل في حفظ البيانات")
             return jsonify({'isOk': False, 'error': 'Failed to save data'}), 500
@@ -115,14 +129,19 @@ def update_data(item_id):
         
         if result.data:
             print(f"✅ تم التحديث بنجاح")
-            return jsonify({'isOk': True, 'data': result.data[0]})
+            returned_data = result.data[0]
+            if 'type' not in returned_data:
+                returned_data['type'] = table_name[:-1] if table_name != 'orders' else 'order'
+            return jsonify({'isOk': True, 'data': returned_data})
         else:
             # محاولة البحث في الجدول الآخر
             other_table = 'agents' if table_name == 'orders' else 'orders'
             result = supabase.table(other_table).update(updated_item).eq('__backendId', item_id).execute()
             if result.data:
                 print(f"✅ تم التحديث في جدول {other_table}")
-                return jsonify({'isOk': True, 'data': result.data[0]})
+                returned_data = result.data[0]
+                returned_data['type'] = other_table[:-1] if other_table != 'orders' else 'order'
+                return jsonify({'isOk': True, 'data': returned_data})
             
             print(f"❌ العنصر غير موجود: {item_id}")
             return jsonify({'isOk': False, 'error': 'Item not found'}), 404
