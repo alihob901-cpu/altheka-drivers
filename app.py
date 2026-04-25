@@ -14,7 +14,6 @@ CORS(app)
 # إعداد Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://zmzotoutdeeizyfoikfw.supabase.co")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "sb_publishable_BqRz02wzKGRblUsM05DnOA_ovErV7U2")
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres.zmzotoutdeeizyfoikfw:Alth3ka%40Drivers2024@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres")
 
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
