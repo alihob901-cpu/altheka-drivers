@@ -15,19 +15,19 @@ firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  console.log('📨 إشعار خلفية:', payload);
+  console.log('📨 [Service Worker] إشعار خلفية:', payload);
   
   const notificationTitle = payload.notification?.title || 'مركز الثقة';
   const notificationOptions = {
     body: payload.notification?.body || 'لديك إشعار جديد',
     icon: '/favicon.ico',
     badge: '/favicon.ico',
+    vibrate: [200, 100, 200],
+    requireInteraction: true,
     data: {
       url: payload.data?.url || '/',
       orderId: payload.data?.orderId || null
-    },
-    vibrate: [200, 100, 200],
-    requireInteraction: true
+    }
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);

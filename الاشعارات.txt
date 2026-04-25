@@ -1,0 +1,9 @@
+const firebaseConfig = {
+  apiKey: "AIzaSyBBRW9XT2wdeBlKh9Fs50H68FUItv68Jbw",
+  authDomain: "trust-center-notifications.firebaseapp.com",
+  projectId: "trust-center-notifications",
+  storageBucket: "trust-center-notifications.firebasestorage.app",
+  messagingSenderId: "150648020047",
+  appId: "1:150648020047:web:c5051941de6f2e81ee9e3a",
+  measurementId: "G-L7S5XKN42N"
+};
