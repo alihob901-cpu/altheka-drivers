@@ -192,6 +192,12 @@ def data_sdk():
 def element_sdk():
     return render_template('element_sdk.js'), 200, {'Content-Type': 'application/javascript'}
 
+# ============== مسار Service Worker للإشعارات ==============
+@app.route('/firebase-messaging-sw.js')
+def service_worker():
+    """تقديم ملف Service Worker الخاص بـ Firebase"""
+    return render_template('firebase-messaging-sw.js'), 200, {'Content-Type': 'application/javascript'}
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """نقطة للتحقق من صحة الخادم"""
@@ -227,6 +233,11 @@ def add_notification():
         if not supabase:
             return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
         
+        # إضافة معرف فريد وتاريخ للإشعار
+        new_item['_id'] = str(int(datetime.now().timestamp() * 1000))
+        new_item['created_at'] = datetime.now().isoformat()
+        new_item['read'] = new_item.get('read', False)
+        
         result = supabase.table('notifications').insert(new_item).execute()
         
         if result.data:
@@ -259,7 +270,7 @@ def delete_all_notifications():
         if not supabase:
             return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
         
-        supabase.table('notifications').delete().neq('id', 0).execute()
+        supabase.table('notifications').delete().neq('_id', '0').execute()
         return jsonify({'isOk': True})
     except Exception as e:
         print(f"API Error Delete Notifications: {e}")
