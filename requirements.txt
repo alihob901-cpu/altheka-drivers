@@ -1,6 +1,8 @@
-Flask
+﻿Flask
 Werkzeug
 gunicorn
 psycopg2-binary
 supabase
 boto3
+python-dotenv
+flask-cors
