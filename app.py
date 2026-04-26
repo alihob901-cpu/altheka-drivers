@@ -316,7 +316,7 @@ def update_data(item_id):
             if 'type' not in returned_data:
                 returned_data['type'] = table_name[:-1] if table_name != 'orders' else 'order'
             
-            # إذا كان تحديث حالة طلب، أرسل إشعاراً للمندوب والمدير
+            # ============== إرسال إشعار للمندوب فقط عند تغيير الحالة ==============
             if (old_item and old_item.get('status') != updated_item.get('status') and 
                 updated_item.get('status') and old_item.get('agent_name')):
                 
@@ -326,16 +326,24 @@ def update_data(item_id):
                 new_status = updated_item.get('status')
                 
                 if agent_name:
-                    title = f"تغيير حالة الطلب"
-                    body = f"طلب {customer_name}: تغير من {old_status} إلى {new_status}"
+                    # تحديد عنوان الإشعار حسب الحالة الجديدة
+                    if new_status == 'واصل':
+                        title = f"✅ طلب واصل"
+                        body = f"تم توصيل طلب {customer_name} بنجاح"
+                    elif new_status == 'راجع':
+                        title = f"↩️ طلب مرتجع"
+                        body = f"تم إرجاع طلب {customer_name}"
+                    elif new_status == 'قيد التوصيل':
+                        title = f"🚚 طلب قيد التوصيل"
+                        body = f"طلب {customer_name} قيد التوصيل الآن"
+                    else:
+                        title = f"📋 تحديث حالة الطلب"
+                        body = f"تم تغيير حالة طلب {customer_name} من {old_status} إلى {new_status}"
                     
-                    # إرسال إشعار للمندوب
+                    # إرسال إشعار للمندوب فقط (وليس للمدير)
                     send_notification_to_user(agent_name, title, body, item_id)
                     
-                    # إرسال إشعار للمدير
-                    send_notification_to_user('admin', title, body, item_id)
-                    
-                    print(f"📨 تم إرسال إشعار للمندوب {agent_name} والمدير")
+                    print(f"📨 تم إرسال إشعار للمندوب {agent_name} (الحالة: {old_status} → {new_status})")
             
             return jsonify({'isOk': True, 'data': returned_data})
         else:
