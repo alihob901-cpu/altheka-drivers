@@ -1,4 +1,27 @@
-هذا الموقع يبقى السيرفرشغال بالنسبة لموقع ريندر لا يدخل ابدا في وضع السكون لانه هذا الموقع سيزوره كل 5 دقائق 
+حساب علي القريشي 
+alihob901@gmail.com
+Aali077177
+
+رابط الموقع 
+https://altheka-drivers.onrender.com
+
+داتا باس سوباباس 
+Alth3ka@Drivers2024
+
+هذا الموقع يبقى السيرفرشغال بالنسبة لموقع ريندر لا يدخل ابدا في وضع السكون لانه هذا الموقع سيزوره كل 5 دقائق
 https://dashboard.uptimerobot.com/monitors
 
+جيت هب 
+https://github.com/alihob901-cpu/altheka-drivers
 
+# انتقل إلى مجلد المشروع
+cd "C:\Users\324\Desktop\altheka-drivers"
+
+# إضافة جميع الملفات المعدلة
+git add .
+
+# عمل commit مع وصف التغييرات
+git commit -m "تحديث app.py لدعم Supabase وإضافة requirements.txt"
+
+# رفع إلى GitHub
+git push origin main

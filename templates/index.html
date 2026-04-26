@@ -188,9 +188,11 @@ const VAPID_KEY = "BA2ONQejtLqvY0xKKIy0WaG3SAc1CCVm1xqvUhHI1gzxxlqGq65sGei8OroEq
 // الربح الثابت للمندوب (افتراضي 1000 دينار)
 const DEFAULT_AGENT_PROFIT = 1000;
 
+// تهيئة Firebase
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
+// ============== دالة حفظ FCM Token في الخادم ==============
 async function saveTokenToServer(token) {
     let userId = 'admin';
     if (currentUser) {
@@ -206,28 +208,60 @@ async function saveTokenToServer(token) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: userId, fcm_token: token })
         });
-        if (response.ok) console.log('✅ تم حفظ FCM Token للمستخدم:', userId);
+        if (response.ok) console.log('✅ تم حفظ FCM Token في الخادم للمستخدم:', userId);
     } catch (error) { console.error('❌ خطأ في حفظ FCM Token:', error); }
 }
 
-async function initFirebaseNotifications() {
+// ============== طلب إذن الإشعارات عند تحميل الصفحة (معدل) ==============
+async function requestNotificationPermission() {
   try {
+    // طلب الإذن من المستخدم
     const permission = await Notification.requestPermission();
-    if (permission !== 'granted') { console.log('❌ لم يتم منح إذن الإشعارات'); return; }
-    const token = await messaging.getToken({ vapidKey: VAPID_KEY });
-    if (token) {
-      console.log('✅ FCM Token:', token);
-      localStorage.setItem('fcm_token', token);
-      await saveTokenToServer(token);
+    
+    if (permission === 'granted') {
+      console.log('✅ تم منح إذن الإشعارات');
+      
+      // الحصول على FCM Token
+      const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+      if (token) {
+        console.log('✅ FCM Token:', token);
+        localStorage.setItem('fcm_token', token);
+        
+        // إذا كان هناك مستخدم مسجل دخوله، نحفظ token في الخادم
+        if (currentUser) {
+          await saveTokenToServer(token);
+        }
+      }
+      
+      // استقبال الإشعارات عندما تكون الصفحة مفتوحة
+      messaging.onMessage((payload) => {
+        console.log('📨 إشعار واصل:', payload);
+        if (typeof showToast === 'function') {
+          showToast(`🔔 ${payload.notification?.title}: ${payload.notification?.body}`);
+        }
+        if (typeof addNotification === 'function') {
+          addNotification(
+            payload.notification?.title || 'تنبيه',
+            payload.notification?.body || 'لديك إشعار جديد',
+            'firebase'
+          );
+        }
+      });
+      
+    } else {
+      console.log('❌ لم يتم منح إذن الإشعارات');
     }
-    messaging.onMessage((payload) => {
-      console.log('📨 إشعار واصل:', payload);
-      if (typeof showToast === 'function') showToast(`🔔 ${payload.notification?.title}: ${payload.notification?.body}`);
-      if (typeof addNotification === 'function') addNotification(payload.notification?.title || 'تنبيه', payload.notification?.body || 'لديك إشعار جديد', 'firebase');
-    });
-  } catch (error) { console.error('❌ خطأ في تهيئة Firebase:', error); }
+  } catch (error) {
+    console.error('❌ خطأ في طلب الإذن:', error);
+  }
 }
 
+// ============== دالة التهيئة القديمة (للتوافق) ==============
+async function initFirebaseNotifications() {
+  await requestNotificationPermission();
+}
+
+// ============== حفظ حالة تسجيل الدخول ==============
 function saveLoginState() {
     if (currentUser) {
         localStorage.setItem('trust_login_state', JSON.stringify({ user: currentUser, isAgentMode: isAgentMode, timestamp: Date.now() }));
@@ -250,7 +284,13 @@ function loadLoginState() {
 }
 function clearLoginState() { localStorage.removeItem('trust_login_state'); }
 
-if ('serviceWorker' in navigator) { window.addEventListener('load', () => { initFirebaseNotifications(); }); }
+// ============== بدء التشغيل (طلب الإشعارات فوراً) ==============
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    // طلب إذن الإشعارات فوراً (حتى قبل تسجيل الدخول)
+    requestNotificationPermission();
+  });
+}
 </script>
 
 <!-- Login Page -->
@@ -585,12 +625,19 @@ async function handleLogin(e) {
   await new Promise(resolve => setTimeout(resolve, 300));
   if (username === 'admin' && password === 'admin123') {
     currentUser = { type: 'admin', agent_name: 'المدير العام' }; isAgentMode = false;
-    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons(); showApp(); saveLoginState(); showToast('مرحباً في لوحة التحكم الإدارية'); return;
+    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons(); showApp(); saveLoginState(); showToast('مرحباً في لوحة التحكم الإدارية'); 
+    // بعد تسجيل الدخول، نحاول حفظ FCM Token مرة أخرى
+    const token = localStorage.getItem('fcm_token');
+    if (token) await saveTokenToServer(token);
+    return;
   }
   const agent = allAgents.find(a => (a.agent_code === username || a.agent_name === username) && a.agent_password === password);
   if (agent) {
     currentUser = agent; isAgentMode = true;
-    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons(); showApp(); saveLoginState(); showToast(`مرحباً ${agent.agent_name}`); return;
+    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons(); showApp(); saveLoginState(); showToast(`مرحباً ${agent.agent_name}`);
+    const token = localStorage.getItem('fcm_token');
+    if (token) await saveTokenToServer(token);
+    return;
   }
   btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons();
   errorMsg.textContent = '❌ بيانات دخول غير صحيحة'; errorMsg.classList.remove('hidden');
@@ -614,7 +661,6 @@ function showApp() {
     document.getElementById('userAvatar').textContent = 'م'; switchPage('dashboard');
   }
   lucide.createIcons();
-  if (typeof initFirebaseNotifications === 'function') initFirebaseNotifications();
 }
 
 function logout() { currentUser = null; isAgentMode = false; clearLoginState(); document.getElementById('app').classList.add('hidden'); document.getElementById('loginPage').classList.remove('hidden'); document.getElementById('loginForm').reset(); showToast('تم تسجيل الخروج'); }
@@ -754,10 +800,8 @@ function renderInventory() {
 
 function clearProduct(productName) {
   if (confirm(`هل أنت متأكد من حذف المنتج "${productName}" من المخزن؟`)) {
-    // حذف المنتج من قاعدة البيانات (إزالة جميع الطلبات المرتبطة بهذا المنتج)
     const ordersToDelete = allOrders.filter(o => o.product === productName);
     if (ordersToDelete.length === 0) { showToast('⚠️ لا توجد طلبات لهذا المنتج'); return; }
-    
     let deletedCount = 0;
     ordersToDelete.forEach(async (order) => {
       const result = await window.dataSdk.delete(order);
@@ -825,7 +869,6 @@ async function handleOrderSubmit(e) {
   if (isAgentMode && currentUser && currentUser.agent_profit_per_order) {
     profitPerOrder = currentUser.agent_profit_per_order;
   } else if (!isAgentMode && agentName !== 'مندوب') {
-    // إذا كان المدير يضيف طلب لمندوب معين، نبحث عن ربح المندوب
     const targetAgent = allAgents.find(a => a.agent_name === agentName);
     if (targetAgent && targetAgent.agent_profit_per_order) {
       profitPerOrder = targetAgent.agent_profit_per_order;
@@ -1001,6 +1044,9 @@ function showToast(msg) {
 if (loadLoginState()) {
     console.log("🔄 استعادة جلسة سابقة للمستخدم:", currentUser?.agent_name || currentUser?.type);
     showApp();
+    // بعد استعادة الجلسة، نحاول حفظ FCM Token مرة أخرى
+    const token = localStorage.getItem('fcm_token');
+    if (token) saveTokenToServer(token);
 } else {
     console.log("👋 لا توجد جلسة سابقة، يرجى تسجيل الدخول");
 }
