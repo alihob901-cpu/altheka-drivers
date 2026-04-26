@@ -325,7 +325,8 @@ def update_data(item_id):
                 old_status = old_item.get('status', 'غير معروف')
                 new_status = updated_item.get('status')
                 
-                if agent_name:
+                # IMPORTANT: لا ترسل إشعاراً إذا كان المندوب هو 'admin' أو None
+                if agent_name and agent_name != 'admin' and agent_name != 'المدير العام':
                     # تحديد عنوان الإشعار حسب الحالة الجديدة
                     if new_status == 'واصل':
                         title = f"✅ طلب واصل"
@@ -340,10 +341,15 @@ def update_data(item_id):
                         title = f"📋 تحديث حالة الطلب"
                         body = f"تم تغيير حالة طلب {customer_name} من {old_status} إلى {new_status}"
                     
-                    # إرسال إشعار للمندوب فقط (وليس للمدير)
-                    send_notification_to_user(agent_name, title, body, item_id)
+                    # إرسال إشعار للمندوب فقط
+                    result_notification = send_notification_to_user(agent_name, title, body, item_id)
                     
-                    print(f"📨 تم إرسال إشعار للمندوب {agent_name} (الحالة: {old_status} → {new_status})")
+                    if result_notification:
+                        print(f"📨 تم إرسال إشعار للمندوب {agent_name} (الحالة: {old_status} → {new_status})")
+                    else:
+                        print(f"⚠️ فشل إرسال إشعار للمندوب {agent_name}")
+                else:
+                    print(f"⚠️ تم تخطي إرسال إشعار للمستخدم {agent_name} (مدير أو غير صالح)")
             
             return jsonify({'isOk': True, 'data': returned_data})
         else:
