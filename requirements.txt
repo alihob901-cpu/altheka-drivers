@@ -6,3 +6,11 @@ supabase
 boto3
 python-dotenv
 flask-cors
+firebase-admin
+
+
+
+
+
+
+
