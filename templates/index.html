@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl" class="h-full">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>مركز الثقة للمنتجات</title>
   <script src="/_sdk/element_sdk.js"></script>
   <script src="/_sdk/data_sdk.js"></script>
@@ -100,6 +100,69 @@
     .notification-item {
       animation: slideIn 0.3s ease-out;
     }
+    
+    /* ============== تحسين واجهة الإشعارات للهواتف ============== */
+    .notification-panel-mobile {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 90%;
+      max-width: 400px;
+      max-height: 80vh;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 1.5rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    .notification-panel-mobile .panel-header {
+      padding: 1rem;
+      border-bottom: 1px solid #1e293b;
+      background: #0f172a;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .notification-panel-mobile .panel-content {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 60vh;
+    }
+    
+    .notification-panel-mobile .panel-footer {
+      padding: 0.75rem;
+      border-top: 1px solid #1e293b;
+      background: #0f172a;
+    }
+    
+    @media (max-width: 640px) {
+      .notification-panel-mobile {
+        width: 95%;
+        max-height: 85vh;
+        border-radius: 1rem;
+      }
+      .notification-panel-mobile .panel-content {
+        max-height: 65vh;
+      }
+    }
+    
+    /* خلفية مظلمة خلف الإشعارات */
+    .notification-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 999;
+    }
   </style>
 </head>
 <body class="h-full bg-slate-950 text-slate-100">
@@ -122,7 +185,35 @@ const VAPID_KEY = "BA2ONQejtLqvY0xKKIy0WaG3SAc1CCVm1xqvUhHI1gzxxlqGq65sGei8OroEq
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-// تهيئة الإشعارات
+// ============== دالة لحفظ FCM Token في الخادم ==============
+async function saveTokenToServer(token) {
+    let userId = 'admin';
+    if (currentUser) {
+        if (currentUser.agent_code) {
+            userId = currentUser.agent_code;
+        } else if (currentUser.type === 'admin') {
+            userId = 'admin';
+        }
+    }
+    
+    try {
+        const response = await fetch('/api/fcm-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userId,
+                fcm_token: token
+            })
+        });
+        if (response.ok) {
+            console.log('✅ تم حفظ FCM Token في الخادم للمستخدم:', userId);
+        }
+    } catch (error) {
+        console.error('❌ خطأ في حفظ FCM Token:', error);
+    }
+}
+
+// ============== تهيئة الإشعارات ==============
 async function initFirebaseNotifications() {
   try {
     const permission = await Notification.requestPermission();
@@ -135,6 +226,7 @@ async function initFirebaseNotifications() {
     if (token) {
       console.log('✅ FCM Token:', token);
       localStorage.setItem('fcm_token', token);
+      await saveTokenToServer(token);
     }
     
     messaging.onMessage((payload) => {
@@ -154,6 +246,42 @@ async function initFirebaseNotifications() {
   } catch (error) {
     console.error('❌ خطأ في تهيئة Firebase:', error);
   }
+}
+
+// ============== حفظ حالة تسجيل الدخول ==============
+function saveLoginState() {
+    if (currentUser) {
+        const loginData = {
+            user: currentUser,
+            isAgentMode: isAgentMode,
+            timestamp: Date.now()
+        };
+        localStorage.setItem('trust_login_state', JSON.stringify(loginData));
+    }
+}
+
+function loadLoginState() {
+    const saved = localStorage.getItem('trust_login_state');
+    if (saved) {
+        try {
+            const loginData = JSON.parse(saved);
+            const hoursSince = (Date.now() - loginData.timestamp) / (1000 * 60 * 60);
+            if (hoursSince < 24) {
+                currentUser = loginData.user;
+                isAgentMode = loginData.isAgentMode;
+                return true;
+            } else {
+                localStorage.removeItem('trust_login_state');
+            }
+        } catch(e) {
+            console.log('خطأ في تحميل حالة تسجيل الدخول');
+        }
+    }
+    return false;
+}
+
+function clearLoginState() {
+    localStorage.removeItem('trust_login_state');
 }
 
 // بدء التشغيل عند تحميل الصفحة
@@ -242,23 +370,13 @@ if ('serviceWorker' in navigator) {
             <i data-lucide="bell" style="width:20px;height:20px"></i>
             <span id="notificationCount" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
           </button>
-          <div id="notificationPanel" class="absolute left-0 top-full mt-2 w-80 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 hidden max-h-96 overflow-y-auto">
-            <div class="p-3 border-b border-slate-800 sticky top-0 bg-slate-900">
-              <h3 class="font-bold text-amber-400">📢 الإشعارات</h3>
-            </div>
-            <div id="notificationsList" class="divide-y divide-slate-800">
-              <div class="p-4 text-center text-slate-500">لا توجد إشعارات</div>
-            </div>
-            <div class="p-2 border-t border-slate-800 sticky bottom-0 bg-slate-900">
-              <button onclick="clearAllNotifications()" class="w-full text-center text-xs text-slate-400 hover:text-amber-400 py-1 transition">مسح الكل</button>
-            </div>
-          </div>
         </div>
         <button id="addOrderBtn" onclick="showNewOrderModal()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition hidden"> <i data-lucide="plus" style="width:16px;height:16px"></i> طلب جديد </button>
         <button onclick="logout()" class="text-slate-400 hover:text-red-400 p-2 rounded-lg hover:bg-slate-800 transition"> <i data-lucide="log-out" style="width:20px;height:20px"></i> </button>
       </div>
     </header>
 
+    <!-- باقي الأقسام (dashboard, orders, agents, etc) بنفس الشكل السابق -->
     <div id="page-dashboard" class="page-content p-6 fade-in hidden">
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -414,7 +532,7 @@ if ('serviceWorker' in navigator) {
   </main>
 </div>
 
-<!-- Modals -->
+<!-- نوافذ منبثقة (Modals) بنفس الشكل السابق -->
 <div id="orderModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeOrderModal()"></div><div class="absolute inset-y-0 left-0 w-full max-w-md bg-slate-900 border-r border-slate-800 overflow-auto shadow-2xl"><div class="p-5 border-b border-slate-800 flex justify-between"><h3 class="font-700 text-lg">➕ طلب جديد</h3><button onclick="closeOrderModal()"><i data-lucide="x"></i></button></div><form id="orderForm" onsubmit="handleOrderSubmit(event)" class="p-5 space-y-4"><div><label class="block text-sm text-slate-400 mb-1">👤 اسم الزبون</label><input id="f_name" required placeholder="أدخل اسم الزبون" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📞 رقم الهاتف</label><input id="f_phone" required placeholder="أدخل رقم الهاتف" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📍 العنوان</label><input id="f_address" required placeholder="أدخل العنوان" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📦 المنتج</label><input id="f_product" required placeholder="اسم المنتج" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div class="grid grid-cols-2 gap-3"><div><label class="block text-sm text-slate-400 mb-1">🔢 الكمية</label><input id="f_qty" type="number" value="1" placeholder="الكمية" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">💰 السعر (د.ع)</label><input id="f_price" type="number" required placeholder="السعر" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div></div><div><label class="block text-sm text-slate-400 mb-1">📅 التاريخ</label><input id="f_date" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📌 ملاحظة (اختياري)</label><textarea id="f_note" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 resize-none" placeholder="أضف ملاحظة للطلب..."></textarea></div><button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-3 rounded-lg font-700 mt-4">💾 حفظ الطلب</button></form></div></div>
 
 <div id="editDateModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditDateModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl"><h3 class="font-700 text-lg mb-4">📅 تعديل تاريخ الطلب</h3><p id="editDateCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p><input id="editDateInput" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 mb-4"><div class="flex gap-3"><button onclick="closeEditDateModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button onclick="confirmEditDate()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ</button></div></div></div>
@@ -450,7 +568,7 @@ let currentEditAgent = null;
 let editingDateOrderId = null;
 let editingNoteOrderId = null;
 
-// ============== نظام الإشعارات ==============
+// ============== نظام الإشعارات (معدل للهواتف) ==============
 let notifications = [];
 let lastDataHash = null;
 let notificationPanelOpen = false;
@@ -490,7 +608,8 @@ function addNotification(title, message, type, orderId = null) {
     type: type || 'info',
     time: timeStr,
     orderId: orderId,
-    read: false
+    read: false,
+    timestamp: now.toISOString()
   };
   notifications.unshift(newNotification);
   if (notifications.length > 50) notifications.pop();
@@ -504,6 +623,11 @@ function addNotification(title, message, type, orderId = null) {
     }
   }
   showToast(`🔔 ${title}`);
+  
+  // اهتزاز الهاتف (اختياري)
+  if (window.navigator && window.navigator.vibrate) {
+      window.navigator.vibrate(200);
+  }
 }
 
 function updateNotificationUI() {
@@ -517,26 +641,31 @@ function updateNotificationUI() {
       countEl.classList.add('hidden');
     }
   }
+  // يتم تحديث واجهة الإشعارات عند فتحها فقط
+}
+
+function renderNotificationPanel() {
   const listEl = document.getElementById('notificationsList');
-  if (listEl) {
-    if (notifications.length === 0) {
-      listEl.innerHTML = '<div class="p-4 text-center text-slate-500">📭 لا توجد إشعارات</div>';
-      return;
-    }
-    listEl.innerHTML = notifications.map(n => `
-      <div class="notification-item p-3 hover:bg-slate-800/50 transition cursor-pointer ${!n.read ? 'bg-slate-800/30' : ''}" onclick="markNotificationRead(${n.id})">
-        <div class="flex items-start gap-2">
-          <div class="text-lg">${n.type === 'order' ? '📦' : n.type === 'note' ? '📌' : n.type === 'status' ? '🔔' : n.type === 'agent' ? '👤' : '🔔'}</div>
-          <div class="flex-1">
-            <p class="text-sm font-semibold ${!n.read ? 'text-amber-400' : 'text-slate-300'}">${n.title}</p>
-            <p class="text-xs text-slate-400">${n.message}</p>
-            <p class="text-xs text-slate-500 mt-1">${n.time}</p>
-          </div>
-          ${!n.read ? '<div class="w-2 h-2 bg-amber-500 rounded-full mt-2"></div>' : ''}
-        </div>
-      </div>
-    `).join('');
+  if (!listEl) return;
+  
+  if (notifications.length === 0) {
+    listEl.innerHTML = '<div class="p-4 text-center text-slate-500">📭 لا توجد إشعارات</div>';
+    return;
   }
+  
+  listEl.innerHTML = notifications.map(n => `
+    <div class="notification-item p-3 hover:bg-slate-800/50 transition cursor-pointer ${!n.read ? 'bg-slate-800/30' : ''}" onclick="markNotificationRead(${n.id})">
+      <div class="flex items-start gap-2">
+        <div class="text-lg">${n.type === 'order' ? '📦' : n.type === 'note' ? '📌' : n.type === 'status' ? '🔔' : n.type === 'agent' ? '👤' : '🔔'}</div>
+        <div class="flex-1">
+          <p class="text-sm font-semibold ${!n.read ? 'text-amber-400' : 'text-slate-300'}">${n.title}</p>
+          <p class="text-xs text-slate-400">${n.message}</p>
+          <p class="text-xs text-slate-500 mt-1">${n.time}</p>
+        </div>
+        ${!n.read ? '<div class="w-2 h-2 bg-amber-500 rounded-full mt-2"></div>' : ''}
+      </div>
+    </div>
+  `).join('');
 }
 
 function markNotificationRead(id) {
@@ -561,35 +690,86 @@ function markAllNotificationsRead() {
 function clearAllNotifications() {
   notifications = [];
   updateNotificationUI();
-  localStorage.removeItem('trust_system_notifications');
+  saveNotificationsToStorage();
+  closeNotifications();
   showToast('🗑️ تم مسح جميع الإشعارات');
 }
 
+// ============== تحسين واجهة الإشعارات للهواتف ==============
 function toggleNotifications() {
-  const panel = document.getElementById('notificationPanel');
-  if (panel) {
-    notificationPanelOpen = !notificationPanelOpen;
-    panel.classList.toggle('hidden');
-    if (notificationPanelOpen) {
-      markAllNotificationsRead();
-    }
+  if (notificationPanelOpen) {
+    closeNotifications();
+    return;
+  }
+  
+  // إظهار الخلفية المظلمة
+  const backdrop = document.createElement('div');
+  backdrop.id = 'notification-backdrop';
+  backdrop.className = 'notification-backdrop';
+  backdrop.onclick = closeNotifications;
+  document.body.appendChild(backdrop);
+  
+  // إظهار لوحة الإشعارات
+  const panel = document.createElement('div');
+  panel.id = 'notification-panel';
+  panel.className = 'notification-panel-mobile';
+  panel.innerHTML = `
+    <div class="panel-header">
+      <h3 class="font-bold text-amber-400 text-lg">📢 الإشعارات</h3>
+      <button onclick="closeNotifications()" class="text-slate-400 hover:text-slate-200 p-1 rounded-lg transition">
+        <i data-lucide="x" style="width:20px;height:20px"></i>
+      </button>
+    </div>
+    <div class="panel-content" id="notificationsList">
+      <div class="p-4 text-center text-slate-500">جار التحميل...</div>
+    </div>
+    <div class="panel-footer">
+      <button onclick="clearAllNotifications()" class="w-full text-center text-sm text-slate-400 hover:text-amber-400 py-2 transition border border-slate-700 rounded-lg">
+        🗑️ مسح الكل
+      </button>
+    </div>
+  `;
+  document.body.appendChild(panel);
+  
+  // تحديث محتوى الإشعارات
+  renderNotificationPanel();
+  
+  notificationPanelOpen = true;
+  markAllNotificationsRead();
+  
+  // إعادة تهيئة الأيقونات
+  if (typeof lucide !== 'undefined') {
+    lucide.createIcons();
   }
 }
 
 function closeNotifications() {
-  const panel = document.getElementById('notificationPanel');
-  if (panel && !panel.classList.contains('hidden')) {
-    panel.classList.add('hidden');
-    notificationPanelOpen = false;
-  }
+  const backdrop = document.getElementById('notification-backdrop');
+  const panel = document.getElementById('notification-panel');
+  if (backdrop) backdrop.remove();
+  if (panel) panel.remove();
+  notificationPanelOpen = false;
 }
 
+// إغلاق الإشعارات عند النقر في أي مكان فارغ (تمت إضافتها عبر backdrop)
+
+// إغلاق لوحة الإشعارات عند النقر خارجها (معالج إضافي)
 document.addEventListener('click', function(e) {
-  const panel = document.getElementById('notificationPanel');
-  const btn = document.getElementById('notificationBtn');
-  if (panel && !panel.classList.contains('hidden') && btn && !btn.contains(e.target) && !panel.contains(e.target)) {
-    panel.classList.add('hidden');
-    notificationPanelOpen = false;
+  if (notificationPanelOpen) {
+    const panel = document.getElementById('notification-panel');
+    const backdrop = document.getElementById('notification-backdrop');
+    if (panel && !panel.contains(e.target) && backdrop && e.target !== backdrop) {
+      // لا نغلق هنا لأن backdrop هو من سيغلق
+    }
+  }
+  
+  // إغلاق السايدبار في الشاشات الصغيرة
+  const sidebar = document.getElementById('sidebar');
+  const menuButton = document.querySelector('button[onclick="toggleSidebar()"]');
+  if (window.innerWidth < 1024 && sidebar && !sidebar.classList.contains('hidden')) {
+    if (!sidebar.contains(e.target) && (!menuButton || !menuButton.contains(e.target))) {
+      sidebar.classList.add('hidden');
+    }
   }
 });
 
@@ -649,6 +829,7 @@ dataHandler.onDataChanged = function(data) {
 
 window.dataSdk.init(dataHandler);
 
+// دوال الزهور والتأثيرات (كما هي)
 function createFlowersFromTop() {
   const flowers = ['🌸', '🌼', '🌻', '🌺', '🌸', '🌷', '🌹', '🌸', '🌼', '🌻', '💐', '🌸'];
   const numberOfFlowers = 40;
@@ -752,16 +933,6 @@ function copyToClipboard(text) {
   navigator.clipboard.writeText(text).then(() => showToast(`✅ تم نسخ: ${text}`)).catch(() => showToast('❌ فشل النسخ'));
 }
 
-document.addEventListener('click', function(event) {
-  const sidebar = document.getElementById('sidebar');
-  const menuButton = document.querySelector('button[onclick="toggleSidebar()"]');
-  if (window.innerWidth < 1024 && sidebar && !sidebar.classList.contains('hidden')) {
-    if (!sidebar.contains(event.target) && (!menuButton || !menuButton.contains(event.target))) {
-      sidebar.classList.add('hidden');
-    }
-  }
-});
-
 let autoRefreshInterval = null;
 function startAutoRefresh() {
   if (autoRefreshInterval) clearInterval(autoRefreshInterval);
@@ -791,6 +962,7 @@ async function handleLogin(e) {
     btn.innerHTML = '<i data-lucide="log-in"></i> دخول';
     lucide.createIcons();
     showApp();
+    saveLoginState();
     showToast('مرحباً في لوحة التحكم الإدارية');
     return;
   }
@@ -802,6 +974,7 @@ async function handleLogin(e) {
     btn.innerHTML = '<i data-lucide="log-in"></i> دخول';
     lucide.createIcons();
     showApp();
+    saveLoginState();
     showToast(`مرحباً ${agent.agent_name}`);
     return;
   }
@@ -843,11 +1016,15 @@ function showApp() {
     switchPage('dashboard');
   }
   lucide.createIcons();
+  if (typeof initFirebaseNotifications === 'function') {
+    initFirebaseNotifications();
+  }
 }
 
 function logout() {
   currentUser = null;
   isAgentMode = false;
+  clearLoginState();
   document.getElementById('app').classList.add('hidden');
   document.getElementById('loginPage').classList.remove('hidden');
   document.getElementById('loginForm').reset();
@@ -866,7 +1043,10 @@ function switchPage(page) {
   document.getElementById('pageTitle').textContent = titles[page] || page;
 }
 
-function toggleSidebar() { document.getElementById('sidebar').classList.toggle('hidden'); }
+function toggleSidebar() { 
+  const sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('hidden');
+}
 
 function updateDashboard() {
   if (isAgentMode && currentUser) updateAgentDashboard();
@@ -1288,6 +1468,14 @@ async function submitAddNotes() { if (!pendingNotesOrderId) return; const order 
 } showToast('✅ تم إرسال الملاحظات'); } else showToast('❌ حدث خطأ'); }
 
 function showToast(msg) { const toast = document.getElementById('toast'); document.getElementById('toastMsg').textContent = msg; toast.classList.remove('hidden'); setTimeout(() => toast.classList.add('hidden'), 2500); }
+
+// ============== التحقق من حالة تسجيل الدخول السابقة عند تحميل الصفحة ==============
+if (loadLoginState()) {
+    console.log("🔄 استعادة جلسة سابقة للمستخدم:", currentUser?.agent_name || currentUser?.type);
+    showApp();
+} else {
+    console.log("👋 لا توجد جلسة سابقة، يرجى تسجيل الدخول");
+}
 
 loadNotificationsFromStorage();
 lucide.createIcons();
