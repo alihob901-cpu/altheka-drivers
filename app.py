@@ -66,6 +66,7 @@ def jenni_login():
     global jenni_jwt_token, jenni_token_expiry
     import time
     
+    print("🔑 محاولة تسجيل الدخول إلى نظام الزعيم...")
     try:
         response = requests.post(
             f"{JENNI_API_URL}/v2/auth/login",
@@ -74,15 +75,17 @@ def jenni_login():
             timeout=30
         )
         
+        print(f"📡 رد تسجيل الدخول: {response.status_code}")
+        
         if response.status_code == 200:
             data = response.json()
             jenni_jwt_token = data.get("token")
-            expires_in = data.get("expires_in", 86400)  # 24 hours default
+            expires_in = data.get("expires_in", 86400)
             jenni_token_expiry = time.time() + expires_in
             print("✅ تم تسجيل الدخول إلى نظام الزعيم بنجاح")
             return True
         else:
-            print(f"❌ فشل تسجيل الدخول إلى الزعيم: {response.status_code} - {response.text}")
+            print(f"❌ فشل تسجيل الدخول إلى الزعيم: {response.status_code} - {response.text[:200]}")
             return False
     except Exception as e:
         print(f"❌ خطأ في تسجيل الدخول إلى الزعيم: {e}")
@@ -94,25 +97,41 @@ def jenni_get_token():
     global jenni_jwt_token, jenni_token_expiry
     
     if not jenni_jwt_token or not jenni_token_expiry or time.time() > jenni_token_expiry - 300:
+        print("⚠️ التوكن منتهي أو غير موجود، إعادة تسجيل الدخول...")
         if not jenni_login():
             return None
     return jenni_jwt_token
 
 def create_shipment_in_jenni(order_data):
     """إرسال طلب جديد إلى نظام الزعيم"""
+    print(f"📤 بدء إرسال الطلب {order_data.get('__backendId')} إلى نظام الزعيم...")
+    
     token = jenni_get_token()
     if not token:
+        print("❌ فشل الحصول على التوكن")
         return {"success": False, "error": "فشل المصادقة مع نظام الزعيم"}
+    
+    print(f"✅ تم الحصول على التوكن: {token[:20]}...")
     
     # تحويل بيانات الطلب إلى صيغة الزعيم
     governorate_map = {
-        "بغداد": "BGD", "بغداد": "BGD",
+        "بغداد": "BGD", "الكرادة": "BGD", "المنصور": "BGD",
         "البصرة": "BAS", "بابل": "BBL", "نينوى": "NIN",
         "أربيل": "ARB", "النجف": "NJF", "كركوك": "KRK",
         "الأنبار": "ANA", "كربلاء": "KAR", "ذي قار": "DHI"
     }
     
-    governorate_code = governorate_map.get(order_data.get("governorate", ""), "BGD")
+    # محاولة استخراج المحافظة من العنوان إذا لم تكن محددة
+    address = order_data.get("customer_address", "")
+    governorate = order_data.get("governorate", "")
+    if not governorate:
+        for key in governorate_map:
+            if key in address:
+                governorate = key
+                break
+    
+    governorate_code = governorate_map.get(governorate, "BGD")
+    print(f"📍 المحافظة: {governorate} -> {governorate_code}")
     
     shipment_payload = {
         "system_code": JENNI_SYSTEM_CODE,
@@ -122,13 +141,15 @@ def create_shipment_in_jenni(order_data):
             "receiver_name": order_data.get("customer_name", ""),
             "receiver_phone_1": order_data.get("customer_phone", ""),
             "governorate_code": governorate_code,
-            "city": order_data.get("city", order_data.get("customer_address", "")),
+            "city": order_data.get("city", order_data.get("customer_address", "")[:50]),
             "address": order_data.get("customer_address", ""),
             "amount_iqd": float(order_data.get("total", 0)),
             "quantity": order_data.get("quantity", 1),
-            "note": order_data.get("admin_notes", "")
+            "note": order_data.get("admin_notes", "")[:200]
         }]
     }
+    
+    print(f"📦 الحمولة المرسلة: {json.dumps(shipment_payload, ensure_ascii=False)[:500]}")
     
     try:
         response = requests.post(
@@ -141,18 +162,28 @@ def create_shipment_in_jenni(order_data):
             timeout=30
         )
         
+        print(f"📡 رد الزعيم: {response.status_code}")
+        
         result = response.json()
+        print(f"📋 نتيجة الزعيم: {json.dumps(result, ensure_ascii=False)[:500]}")
+        
         if response.status_code == 200 or response.status_code == 201:
             if result.get("accepted_shipments") and len(result["accepted_shipments"]) > 0:
                 shipment = result["accepted_shipments"][0]
+                print(f"✅ تم قبول الطلب في الزعيم، ID: {shipment.get('shipment_id')}")
                 return {
                     "success": True,
                     "shipment_id": shipment.get("shipment_id"),
                     "message": "تم إرسال الطلب إلى نظام الزعيم بنجاح"
                 }
+            else:
+                print(f"⚠️ لم يتم قبول الطلب: {result.get('rejected_shipments', [])}")
+                return {"success": False, "error": "الطلب مرفوض من نظام الزعيم"}
         else:
+            print(f"❌ فشل الإرسال: {result}")
             return {"success": False, "error": result.get("message", "فشل إرسال الطلب")}
     except Exception as e:
+        print(f"❌ استثناء في الإرسال: {e}")
         return {"success": False, "error": str(e)}
 
 # ============== دوال الإشعارات ==============
@@ -274,6 +305,8 @@ def add_data():
             table_name = 'orders'
             new_item['type'] = 'order'
         
+        print(f"📝 إضافة إلى جدول {table_name}: {new_item.get('customer_name', new_item.get('agent_name', 'غير معروف'))}")
+        
         result = supabase.table(table_name).insert(new_item).execute()
         
         if result.data:
@@ -281,16 +314,28 @@ def add_data():
             if 'type' not in returned_data:
                 returned_data['type'] = table_name[:-1] if table_name != 'orders' else 'order'
             
+            # ============== DEBUG ==============
+            print(f"🔍 DEBUG: table_name={table_name}")
+            print(f"🔍 DEBUG: status={new_item.get('status')}")
+            print(f"🔍 DEBUG: will send to Jenni? {table_name == 'orders' and new_item.get('status') == 'جديد'}")
+            # ===================================
+            
             # ============== إرسال الطلب إلى نظام الزعيم ==============
             if table_name == 'orders' and new_item.get('status') == 'جديد':
+                print("🚀 بدء إرسال الطلب إلى نظام الزعيم...")
                 jenni_result = create_shipment_in_jenni(new_item)
+                print(f"📊 نتيجة الإرسال إلى الزعيم: {jenni_result}")
+                
                 if jenni_result.get("success"):
                     print(f"📤 تم إرسال الطلب {new_item['__backendId']} إلى نظام الزعيم")
-                    # تحديث الطلب بـ shipment_id من الزعيم
                     if jenni_result.get("shipment_id"):
                         supabase.table('orders').update({
                             "jenni_shipment_id": jenni_result["shipment_id"]
                         }).eq('__backendId', new_item['__backendId']).execute()
+                else:
+                    print(f"⚠️ فشل إرسال الطلب إلى الزعيم: {jenni_result.get('error')}")
+            else:
+                print("⏭️ تخطي إرسال إلى الزعيم (ليس طلب order أو الحالة ليست جديد)")
             
             return jsonify({'isOk': True, 'data': returned_data}), 201
         return jsonify({'isOk': False, 'error': 'Failed to save'}), 500
@@ -368,7 +413,6 @@ def delete_data(item_id):
 def jenni_webhook():
     """استقبال تحديثات الحالة من نظام الزعيم"""
     try:
-        # التحقق من التوكن (Static Bearer Token)
         auth_header = request.headers.get('Authorization', '')
         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
         
@@ -377,7 +421,7 @@ def jenni_webhook():
             return jsonify({"success": False, "message": "Invalid token"}), 401
         
         data = request.get_json()
-        print(f"📬 استلام تحديث من نظام الزعيم: {json.dumps(data, ensure_ascii=False)}")
+        print(f"📬 استلام تحديث من نظام الزعيم: {json.dumps(data, ensure_ascii=False)[:500]}")
         
         system_code = data.get('system_code')
         updates = data.get('updates', [])
@@ -387,17 +431,13 @@ def jenni_webhook():
         
         for update in updates:
             shipment_number = update.get('shipment_number')
-            jenni_shipment_id = update.get('shipment_id')
             action_code = update.get('action_code')
             current_step = update.get('current_step')
             current_step_ar = update.get('current_step_ar')
             note = update.get('note')
-            agent_latitude = update.get('agent_latitude')
-            agent_longitude = update.get('agent_longitude')
             
             print(f"📦 تحديث للطلب {shipment_number}: {action_code} - {current_step_ar}")
             
-            # تحويل حالة الزعيم إلى حالة نظامك
             status_map = {
                 'DELIVERED': 'واصل',
                 'DELIVERED_PRICE_CHANGED': 'واصل',
@@ -412,7 +452,6 @@ def jenni_webhook():
             new_status = status_map.get(current_step, None)
             
             if new_status and supabase:
-                # تحديث حالة الطلب في Supabase
                 result = supabase.table('orders').update({
                     "status": new_status,
                     "admin_notes": note,
@@ -423,7 +462,6 @@ def jenni_webhook():
                 if result.data:
                     print(f"✅ تم تحديث حالة الطلب {shipment_number} إلى {new_status}")
                     
-                    # إرسال إشعار للمندوب
                     order = result.data[0]
                     agent_name = order.get('agent_name')
                     if agent_name:
@@ -440,7 +478,7 @@ def jenni_webhook():
         print(f"❌ خطأ في معالجة Webhook: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
-# ============== باقي الـ Routes (بدون تغيير) ==============
+# ============== باقي الـ Routes ==============
 
 @app.route('/')
 def index():

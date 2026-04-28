@@ -25,3 +25,15 @@ git commit -m "تحديث app.py لدعم Supabase وإضافة requirements.txt
 
 # رفع إلى GitHub
 git push origin main
+
+
+
+📋 بيانات تكامل نظام الزعيم (جاهزة للاستخدام):
+الحقل	القيمة
+Username	07717798622
+Password	30007000
+system_code	ECOMMERCE_STORE_01
+Base domain (Webhook)	https://altheka-drivers.onrender.com
+Webhook endpoint	https://altheka-drivers.onrender.com/v2/push/update-status
+Static bearer token	TrustCenterSecretKey123
+Mode
