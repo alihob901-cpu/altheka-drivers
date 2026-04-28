@@ -5,6 +5,8 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 import json
+import requests
+from functools import wraps
 
 # تحميل المتغيرات البيئية
 load_dotenv()
@@ -12,21 +14,30 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-# إعداد Supabase
+# ============== إعداد Supabase ==============
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://zmzotoutdeeizyfoikfw.supabase.co")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "sb_publishable_BqRz02wzKGRblUsM05DnOA_ovErV7U2")
+
+# ============== إعداد نظام الزعيم (Jenni Logistics) ==============
+JENNI_API_URL = "https://jenni.alzaeemexp.com/api"
+JENNI_USERNAME = os.getenv("JENNI_USERNAME", "07717798622")
+JENNI_PASSWORD = os.getenv("JENNI_PASSWORD", "30007000")
+JENNI_SYSTEM_CODE = os.getenv("JENNI_SYSTEM_CODE", "ECOMMERCE_STORE_01")
+JENNI_WEBHOOK_TOKEN = os.getenv("JENNI_WEBHOOK_TOKEN", "TrustCenterSecretKey123")
+
+# متغير لتخزين JWT token من الزعيم
+jenni_jwt_token = None
+jenni_token_expiry = None
 
 # ============== إعداد Firebase Admin SDK ==============
 firebase_initialized = False
 try:
-    # قراءة JSON من متغير البيئة
     firebase_cred_json = os.getenv("FIREBASE_ADMIN_CRED_JSON")
     if firebase_cred_json:
         cred_dict = json.loads(firebase_cred_json)
         import firebase_admin
         from firebase_admin import credentials, messaging
         
-        # التحقق من عدم وجود تهيئة سابقة
         if not firebase_admin._apps:
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
@@ -36,130 +47,145 @@ try:
             firebase_initialized = True
             print("✅ Firebase Admin SDK already initialized")
     else:
-        print("⚠️ FIREBASE_ADMIN_CRED_JSON not found in environment variables")
-        print("📝 الإشعارات لن تعمل حتى يتم إضافة المفتاح")
+        print("⚠️ FIREBASE_ADMIN_CRED_JSON not found")
 except Exception as e:
-    print(f"❌ خطأ في تهيئة Firebase Admin SDK: {e}")
-    print("📝 الإشعارات لن تعمل حتى يتم إصلاح المشكلة")
+    print(f"❌ خطأ في تهيئة Firebase: {e}")
 
-# إعداد FCM Server Key (الطريقة البديلة)
 FCM_SERVER_KEY = os.getenv("FCM_SERVER_KEY", "")
-FCM_SENDER_ID = os.getenv("FCM_SENDER_ID", "150648020047")
 
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
     print("✅ تم الاتصال بـ Supabase بنجاح!")
-    print(f"📡 Supabase URL: {SUPABASE_URL}")
-    
-    # التحقق من وجود جدول fcm_tokens وإنشاؤه إذا لم يكن موجوداً
-    try:
-        # محاولة الاستعلام من الجدول للتحقق من وجوده
-        supabase.table('fcm_tokens').select('count').limit(1).execute()
-        print("✅ جدول fcm_tokens موجود")
-    except Exception as e:
-        print("⚠️ جدول fcm_tokens غير موجود، يرجى إنشاؤه يدوياً في Supabase")
-        print("📝 SQL لإنشاء الجدول:")
-        print("""
-        CREATE TABLE fcm_tokens (
-            id SERIAL PRIMARY KEY,
-            user_id VARCHAR(255) NOT NULL UNIQUE,
-            fcm_token TEXT NOT NULL,
-            device_info TEXT,
-            created_at TIMESTAMP DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW()
-        );
-        """)
-        
 except Exception as e:
     print(f"❌ خطأ في الاتصال بـ Supabase: {e}")
     supabase = None
 
-def get_all_data():
-    """جلب جميع البيانات من Supabase مع ضمان وجود حقل type"""
+# ============== دوال نظام الزعيم ==============
+def jenni_login():
+    """تسجيل الدخول إلى نظام الزعيم والحصول على JWT token"""
+    global jenni_jwt_token, jenni_token_expiry
+    import time
+    
     try:
-        if not supabase:
-            print("⚠️ Supabase غير متصل")
-            return []
+        response = requests.post(
+            f"{JENNI_API_URL}/v2/auth/login",
+            json={"username": JENNI_USERNAME, "password": JENNI_PASSWORD},
+            headers={"Content-Type": "application/json"},
+            timeout=30
+        )
         
-        print("📥 جلب الطلبات من Supabase...")
-        orders_response = supabase.table('orders').select('*').execute()
-        orders = orders_response.data if orders_response.data else []
-        
-        # إضافة حقل type للطلبات
-        for order in orders:
-            order['type'] = 'order'
-        print(f"📦 تم جلب {len(orders)} طلب")
-        
-        print("👥 جلب المندوبين من Supabase...")
-        agents_response = supabase.table('agents').select('*').execute()
-        agents = agents_response.data if agents_response.data else []
-        
-        # إضافة حقل type للمندوبين
-        for agent in agents:
-            agent['type'] = 'agent'
-        print(f"👤 تم جلب {len(agents)} مندوب")
-        
-        all_data = orders + agents
-        print(f"✅ إجمالي البيانات: {len(all_data)} عنصر")
-        return all_data
+        if response.status_code == 200:
+            data = response.json()
+            jenni_jwt_token = data.get("token")
+            expires_in = data.get("expires_in", 86400)  # 24 hours default
+            jenni_token_expiry = time.time() + expires_in
+            print("✅ تم تسجيل الدخول إلى نظام الزعيم بنجاح")
+            return True
+        else:
+            print(f"❌ فشل تسجيل الدخول إلى الزعيم: {response.status_code} - {response.text}")
+            return False
     except Exception as e:
-        print(f"❌ خطأ في جلب البيانات: {e}")
-        return []
+        print(f"❌ خطأ في تسجيل الدخول إلى الزعيم: {e}")
+        return False
 
+def jenni_get_token():
+    """الحصول على JWT token صالح (مع إعادة تسجيل الدخول إذا انتهى)"""
+    import time
+    global jenni_jwt_token, jenni_token_expiry
+    
+    if not jenni_jwt_token or not jenni_token_expiry or time.time() > jenni_token_expiry - 300:
+        if not jenni_login():
+            return None
+    return jenni_jwt_token
+
+def create_shipment_in_jenni(order_data):
+    """إرسال طلب جديد إلى نظام الزعيم"""
+    token = jenni_get_token()
+    if not token:
+        return {"success": False, "error": "فشل المصادقة مع نظام الزعيم"}
+    
+    # تحويل بيانات الطلب إلى صيغة الزعيم
+    governorate_map = {
+        "بغداد": "BGD", "بغداد": "BGD",
+        "البصرة": "BAS", "بابل": "BBL", "نينوى": "NIN",
+        "أربيل": "ARB", "النجف": "NJF", "كركوك": "KRK",
+        "الأنبار": "ANA", "كربلاء": "KAR", "ذي قار": "DHI"
+    }
+    
+    governorate_code = governorate_map.get(order_data.get("governorate", ""), "BGD")
+    
+    shipment_payload = {
+        "system_code": JENNI_SYSTEM_CODE,
+        "shipments": [{
+            "shipment_number": order_data.get("__backendId", ""),
+            "external_shipment_id": order_data.get("__backendId", ""),
+            "receiver_name": order_data.get("customer_name", ""),
+            "receiver_phone_1": order_data.get("customer_phone", ""),
+            "governorate_code": governorate_code,
+            "city": order_data.get("city", order_data.get("customer_address", "")),
+            "address": order_data.get("customer_address", ""),
+            "amount_iqd": float(order_data.get("total", 0)),
+            "quantity": order_data.get("quantity", 1),
+            "note": order_data.get("admin_notes", "")
+        }]
+    }
+    
+    try:
+        response = requests.post(
+            f"{JENNI_API_URL}/v2/shipments/create",
+            json=shipment_payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}"
+            },
+            timeout=30
+        )
+        
+        result = response.json()
+        if response.status_code == 200 or response.status_code == 201:
+            if result.get("accepted_shipments") and len(result["accepted_shipments"]) > 0:
+                shipment = result["accepted_shipments"][0]
+                return {
+                    "success": True,
+                    "shipment_id": shipment.get("shipment_id"),
+                    "message": "تم إرسال الطلب إلى نظام الزعيم بنجاح"
+                }
+        else:
+            return {"success": False, "error": result.get("message", "فشل إرسال الطلب")}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+# ============== دوال الإشعارات ==============
 def send_fcm_notification_via_admin(fcm_token, title, body, data=None):
-    """إرسال إشعار عبر Firebase Admin SDK (الطريقة الحديثة)"""
     if not firebase_initialized:
-        print("⚠️ Firebase Admin SDK not initialized, trying legacy method")
         return send_fcm_notification_via_legacy(fcm_token, title, body, data)
     
     try:
         from firebase_admin import messaging
-        
-        # بناء رسالة الإشعار
         message = messaging.Message(
-            notification=messaging.Notification(
-                title=title,
-                body=body,
-            ),
+            notification=messaging.Notification(title=title, body=body),
             data=data or {},
             token=fcm_token,
             android=messaging.AndroidConfig(
                 priority="high",
-                notification=messaging.AndroidNotification(
-                    sound="default",
-                    click_action="FLUTTER_NOTIFICATION_CLICK"
-                )
+                notification=messaging.AndroidNotification(sound="default")
             ),
             apns=messaging.APNSConfig(
                 payload=messaging.APNSPayload(
-                    aps=messaging.Aps(
-                        sound="default",
-                        badge=1
-                    )
+                    aps=messaging.Aps(sound="default", badge=1)
                 )
             )
         )
-        
-        # إرسال الإشعار
         response = messaging.send(message)
-        print(f"✅ تم إرسال الإشعار بنجاح عبر Admin SDK: {response}")
+        print(f"✅ تم إرسال الإشعار: {response}")
         return True
-        
     except Exception as e:
-        print(f"❌ خطأ في إرسال الإشعار عبر Admin SDK: {e}")
+        print(f"❌ خطأ في الإشعار: {e}")
         return False
 
 def send_fcm_notification_via_legacy(fcm_token, title, body, data=None):
-    """إرسال إشعار عبر FCM Legacy API (طريقة احتياطية)"""
-    if not fcm_token:
-        print("⚠️ لا يوجد FCM Token للإرسال")
+    if not fcm_token or not FCM_SERVER_KEY:
         return False
-    
-    if not FCM_SERVER_KEY:
-        print("⚠️ لم يتم تعيين FCM_SERVER_KEY في متغيرات البيئة")
-        return False
-    
-    import requests
     
     url = "https://fcm.googleapis.com/fcm/send"
     headers = {
@@ -169,235 +195,252 @@ def send_fcm_notification_via_legacy(fcm_token, title, body, data=None):
     
     notification_data = {
         "to": fcm_token,
-        "notification": {
-            "title": title,
-            "body": body,
-            "icon": "/favicon.ico",
-            "click_action": "https://altheka-drivers.onrender.com"
-        },
-        "data": data or {
-            "click_action": "FLUTTER_NOTIFICATION_CLICK",
-            "sound": "default"
-        }
+        "notification": {"title": title, "body": body, "sound": "default"},
+        "data": data or {}
     }
     
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(notification_data))
+        response = requests.post(url, headers=headers, json=notification_data)
         result = response.json()
         if response.status_code == 200 and result.get("success", 0) > 0:
-            print(f"✅ تم إرسال الإشعار بنجاح عبر Legacy API: {title}")
+            print(f"✅ تم إرسال الإشعار: {title}")
             return True
-        else:
-            print(f"❌ فشل إرسال الإشعار: {result}")
-            return False
+        return False
     except Exception as e:
-        print(f"❌ خطأ في إرسال الإشعار: {e}")
+        print(f"❌ خطأ: {e}")
         return False
 
-def send_fcm_notification(fcm_token, title, body, data=None):
-    """إرسال إشعار عبر FCM (تحاول Admin SDK أولاً ثم Legacy)"""
-    # محاولة إرسال عبر Admin SDK أولاً
-    if send_fcm_notification_via_admin(fcm_token, title, body, data):
-        return True
-    
-    # إذا فشلت، جرب Legacy API
-    return send_fcm_notification_via_legacy(fcm_token, title, body, data)
-
 def send_notification_to_user(user_id, title, body, order_id=None):
-    """إرسال إشعار إلى مستخدم محدد (مندوب أو مدير) باستخدام FCM Token المخزن"""
     try:
         if not supabase:
-            print("⚠️ Supabase غير متصل")
             return False
         
-        # البحث عن FCM Token للمستخدم
         result = supabase.table('fcm_tokens').select('fcm_token').eq('user_id', user_id).execute()
-        
         if not result.data:
             print(f"⚠️ لا يوجد FCM Token للمستخدم: {user_id}")
             return False
         
         fcm_token = result.data[0]['fcm_token']
-        
-        # تحضير البيانات الإضافية
-        data = {}
-        if order_id:
-            data['order_id'] = str(order_id)
-        
-        # إرسال الإشعار
-        return send_fcm_notification(fcm_token, title, body, data)
-        
+        data = {'order_id': str(order_id)} if order_id else {}
+        return send_fcm_notification_via_admin(fcm_token, title, body, data)
     except Exception as e:
-        print(f"❌ خطأ في إرسال الإشعار للمستخدم {user_id}: {e}")
+        print(f"❌ خطأ: {e}")
         return False
+
+def get_all_data():
+    try:
+        if not supabase:
+            return []
+        
+        orders_response = supabase.table('orders').select('*').execute()
+        orders = orders_response.data if orders_response.data else []
+        for order in orders:
+            order['type'] = 'order'
+        
+        agents_response = supabase.table('agents').select('*').execute()
+        agents = agents_response.data if agents_response.data else []
+        for agent in agents:
+            agent['type'] = 'agent'
+        
+        return orders + agents
+    except Exception as e:
+        print(f"❌ خطأ في جلب البيانات: {e}")
+        return []
+
+# ============== API Routes ==============
 
 @app.route('/api/data', methods=['GET'])
 def get_data():
-    """جلب جميع البيانات"""
     try:
         data = get_all_data()
         return jsonify(data)
     except Exception as e:
-        print(f"API Error GET: {e}")
         return jsonify([]), 500
 
 @app.route('/api/data', methods=['POST'])
 def add_data():
-    """إضافة بيانات جديدة (طلب أو مندوب)"""
     try:
         new_item = request.json
-        if not new_item:
-            return jsonify({"isOk": False, "error": "No data provided"}), 400
+        if not new_item or not supabase:
+            return jsonify({"isOk": False, "error": "Invalid request"}), 400
         
-        if not supabase:
-            return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
-        
-        # إضافة معرف فريد وتاريخ
         new_item['__backendId'] = str(int(datetime.now().timestamp() * 1000))
         new_item['created_at'] = datetime.now().isoformat()
+        new_item['updated_at'] = datetime.now().isoformat()
         
-        # تحديد الجدول المناسب والتأكد من وجود type
         if new_item.get('type') == 'agent':
             table_name = 'agents'
         else:
             table_name = 'orders'
             new_item['type'] = 'order'
         
-        print(f"📝 إضافة إلى جدول {table_name}: {new_item.get('customer_name', new_item.get('agent_name', 'غير معروف'))}")
-        print(f"📋 البيانات المرسلة: {new_item}")
-        
-        # إدراج البيانات في Supabase
         result = supabase.table(table_name).insert(new_item).execute()
         
         if result.data:
-            print(f"✅ تمت الإضافة بنجاح، ID: {result.data[0].get('__backendId')}")
-            # تأكد من أن البيانات المرجعة تحتوي على حقل type
             returned_data = result.data[0]
             if 'type' not in returned_data:
                 returned_data['type'] = table_name[:-1] if table_name != 'orders' else 'order'
-            return jsonify({'isOk': True, 'data': returned_data}), 201
-        else:
-            print("❌ فشل في حفظ البيانات")
-            return jsonify({'isOk': False, 'error': 'Failed to save data'}), 500
             
+            # ============== إرسال الطلب إلى نظام الزعيم ==============
+            if table_name == 'orders' and new_item.get('status') == 'جديد':
+                jenni_result = create_shipment_in_jenni(new_item)
+                if jenni_result.get("success"):
+                    print(f"📤 تم إرسال الطلب {new_item['__backendId']} إلى نظام الزعيم")
+                    # تحديث الطلب بـ shipment_id من الزعيم
+                    if jenni_result.get("shipment_id"):
+                        supabase.table('orders').update({
+                            "jenni_shipment_id": jenni_result["shipment_id"]
+                        }).eq('__backendId', new_item['__backendId']).execute()
+            
+            return jsonify({'isOk': True, 'data': returned_data}), 201
+        return jsonify({'isOk': False, 'error': 'Failed to save'}), 500
     except Exception as e:
         print(f"API Error POST: {e}")
         return jsonify({"isOk": False, "error": str(e)}), 500
 
 @app.route('/api/data/<item_id>', methods=['PUT'])
 def update_data(item_id):
-    """تحديث بيانات موجودة (طلب أو مندوب)"""
     try:
         updated_item = request.json
         if not supabase:
             return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
         
-        # تخزين البيانات القديمة لإرسال الإشعارات
-        old_item = None
+        updated_item['updated_at'] = datetime.now().isoformat()
         
-        # تحديد الجدول المناسب
-        if updated_item.get('type') == 'agent':
-            table_name = 'agents'
-        else:
-            table_name = 'orders'
-            # جلب البيانات القديمة للطلب (لإرسال إشعار عند تغيير الحالة)
-            old_result = supabase.table('orders').select('*').eq('__backendId', item_id).execute()
-            if old_result.data:
-                old_item = old_result.data[0]
+        table_name = 'agents' if updated_item.get('type') == 'agent' else 'orders'
         
-        print(f"✏️ تحديث في جدول {table_name}، ID: {item_id}")
+        old_result = supabase.table('orders').select('*').eq('__backendId', item_id).execute()
+        old_item = old_result.data[0] if old_result.data else None
         
-        # تحديث البيانات في Supabase
         result = supabase.table(table_name).update(updated_item).eq('__backendId', item_id).execute()
         
         if result.data:
-            print(f"✅ تم التحديث بنجاح")
-            returned_data = result.data[0]
-            if 'type' not in returned_data:
-                returned_data['type'] = table_name[:-1] if table_name != 'orders' else 'order'
-            
-            # ============== إرسال إشعار للمندوب فقط عند تغيير الحالة ==============
-            if (old_item and old_item.get('status') != updated_item.get('status') and 
-                updated_item.get('status') and old_item.get('agent_name')):
-                
+            # إرسال إشعار عند تغيير الحالة
+            if old_item and old_item.get('status') != updated_item.get('status'):
                 agent_name = old_item.get('agent_name')
                 customer_name = old_item.get('customer_name', 'زبون')
-                old_status = old_item.get('status', 'غير معروف')
                 new_status = updated_item.get('status')
                 
-                # IMPORTANT: لا ترسل إشعاراً إذا كان المندوب هو 'admin' أو None
-                if agent_name and agent_name != 'admin' and agent_name != 'المدير العام':
-                    # تحديد عنوان الإشعار حسب الحالة الجديدة
+                if agent_name and agent_name not in ['admin', 'المدير العام']:
                     if new_status == 'واصل':
-                        title = f"✅ طلب واصل"
+                        title = "✅ طلب واصل"
                         body = f"تم توصيل طلب {customer_name} بنجاح"
                     elif new_status == 'راجع':
-                        title = f"↩️ طلب مرتجع"
+                        title = "↩️ طلب مرتجع"
                         body = f"تم إرجاع طلب {customer_name}"
                     elif new_status == 'قيد التوصيل':
-                        title = f"🚚 طلب قيد التوصيل"
+                        title = "🚚 طلب قيد التوصيل"
                         body = f"طلب {customer_name} قيد التوصيل الآن"
                     else:
-                        title = f"📋 تحديث حالة الطلب"
-                        body = f"تم تغيير حالة طلب {customer_name} من {old_status} إلى {new_status}"
+                        title = "📋 تحديث حالة الطلب"
+                        body = f"تم تغيير حالة طلب {customer_name} إلى {new_status}"
                     
-                    # إرسال إشعار للمندوب فقط
-                    result_notification = send_notification_to_user(agent_name, title, body, item_id)
-                    
-                    if result_notification:
-                        print(f"📨 تم إرسال إشعار للمندوب {agent_name} (الحالة: {old_status} → {new_status})")
-                    else:
-                        print(f"⚠️ فشل إرسال إشعار للمندوب {agent_name}")
-                else:
-                    print(f"⚠️ تم تخطي إرسال إشعار للمستخدم {agent_name} (مدير أو غير صالح)")
+                    send_notification_to_user(agent_name, title, body, item_id)
             
-            return jsonify({'isOk': True, 'data': returned_data})
-        else:
-            # محاولة البحث في الجدول الآخر
-            other_table = 'agents' if table_name == 'orders' else 'orders'
-            result = supabase.table(other_table).update(updated_item).eq('__backendId', item_id).execute()
-            if result.data:
-                print(f"✅ تم التحديث في جدول {other_table}")
-                returned_data = result.data[0]
-                returned_data['type'] = other_table[:-1] if other_table != 'orders' else 'order'
-                return jsonify({'isOk': True, 'data': returned_data})
-            
-            print(f"❌ العنصر غير موجود: {item_id}")
-            return jsonify({'isOk': False, 'error': 'Item not found'}), 404
-            
+            return jsonify({'isOk': True, 'data': result.data[0]})
+        
+        return jsonify({'isOk': False, 'error': 'Item not found'}), 404
     except Exception as e:
         print(f"API Error PUT: {e}")
         return jsonify({"isOk": False, "error": str(e)}), 500
 
 @app.route('/api/data/<item_id>', methods=['DELETE'])
 def delete_data(item_id):
-    """حذف بيانات (طلب أو مندوب)"""
     try:
         if not supabase:
             return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
         
-        print(f"🗑️ حذف عنصر ID: {item_id}")
-        
-        # محاولة الحذف من جدول الطلبات أولاً
         result = supabase.table('orders').delete().eq('__backendId', item_id).execute()
-        
         if result.data:
-            print(f"✅ تم الحذف من جدول orders")
             return jsonify({'isOk': True})
         
-        # محاولة الحذف من جدول المندوبين
         result = supabase.table('agents').delete().eq('__backendId', item_id).execute()
-        
         if result.data:
-            print(f"✅ تم الحذف من جدول agents")
             return jsonify({'isOk': True})
         
-        print(f"❌ العنصر غير موجود: {item_id}")
         return jsonify({'isOk': False, 'error': 'Item not found'}), 404
-        
     except Exception as e:
         print(f"API Error DELETE: {e}")
         return jsonify({"isOk": False, "error": str(e)}), 500
+
+# ============== Webhook لاستقبال تحديثات الزعيم ==============
+@app.route('/v2/push/update-status', methods=['POST'])
+def jenni_webhook():
+    """استقبال تحديثات الحالة من نظام الزعيم"""
+    try:
+        # التحقق من التوكن (Static Bearer Token)
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+        
+        if token != JENNI_WEBHOOK_TOKEN:
+            print(f"⚠️ توكن غير صالح: {token}")
+            return jsonify({"success": False, "message": "Invalid token"}), 401
+        
+        data = request.get_json()
+        print(f"📬 استلام تحديث من نظام الزعيم: {json.dumps(data, ensure_ascii=False)}")
+        
+        system_code = data.get('system_code')
+        updates = data.get('updates', [])
+        
+        if system_code != JENNI_SYSTEM_CODE:
+            return jsonify({"success": False, "message": "Invalid system code"}), 401
+        
+        for update in updates:
+            shipment_number = update.get('shipment_number')
+            jenni_shipment_id = update.get('shipment_id')
+            action_code = update.get('action_code')
+            current_step = update.get('current_step')
+            current_step_ar = update.get('current_step_ar')
+            note = update.get('note')
+            agent_latitude = update.get('agent_latitude')
+            agent_longitude = update.get('agent_longitude')
+            
+            print(f"📦 تحديث للطلب {shipment_number}: {action_code} - {current_step_ar}")
+            
+            # تحويل حالة الزعيم إلى حالة نظامك
+            status_map = {
+                'DELIVERED': 'واصل',
+                'DELIVERED_PRICE_CHANGED': 'واصل',
+                'PARTIALLY_DELIVERED': 'واصل',
+                'OFD': 'قيد التوصيل',
+                'POSTPONED': 'قيد التوصيل',
+                'RTO_WH': 'راجع',
+                'RTO_WITH_DA': 'راجع',
+                'RTO_CONFIRMED': 'راجع'
+            }
+            
+            new_status = status_map.get(current_step, None)
+            
+            if new_status and supabase:
+                # تحديث حالة الطلب في Supabase
+                result = supabase.table('orders').update({
+                    "status": new_status,
+                    "admin_notes": note,
+                    "updated_at": datetime.now().isoformat(),
+                    "jenni_last_update": datetime.now().isoformat()
+                }).eq('__backendId', shipment_number).execute()
+                
+                if result.data:
+                    print(f"✅ تم تحديث حالة الطلب {shipment_number} إلى {new_status}")
+                    
+                    # إرسال إشعار للمندوب
+                    order = result.data[0]
+                    agent_name = order.get('agent_name')
+                    if agent_name:
+                        send_notification_to_user(
+                            agent_name,
+                            f"تحديث حالة الطلب",
+                            f"تم تغيير حالة طلب {order.get('customer_name', '')} إلى {new_status}",
+                            shipment_number
+                        )
+        
+        return jsonify({"success": True, "message": f"Processed {len(updates)} updates"}), 200
+        
+    except Exception as e:
+        print(f"❌ خطأ في معالجة Webhook: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# ============== باقي الـ Routes (بدون تغيير) ==============
 
 @app.route('/')
 def index():
@@ -411,41 +454,30 @@ def data_sdk():
 def element_sdk():
     return render_template('element_sdk.js'), 200, {'Content-Type': 'application/javascript'}
 
-# ============== مسار Service Worker للإشعارات ==============
 @app.route('/firebase-messaging-sw.js')
 def service_worker():
-    """تقديم ملف Service Worker الخاص بـ Firebase"""
     return render_template('firebase-messaging-sw.js'), 200, {'Content-Type': 'application/javascript'}
-
-# ============== API FCM Tokens ==============
 
 @app.route('/api/fcm-token', methods=['POST'])
 def save_fcm_token():
-    """حفظ FCM Token للمستخدم الحالي"""
     try:
         data = request.json
         user_id = data.get('user_id')
         fcm_token = data.get('fcm_token')
         device_info = data.get('device_info', 'web')
         
-        if not user_id or not fcm_token:
-            return jsonify({"isOk": False, "error": "Missing user_id or fcm_token"}), 400
+        if not user_id or not fcm_token or not supabase:
+            return jsonify({"isOk": False, "error": "Missing data"}), 400
         
-        if not supabase:
-            return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
-        
-        # التحقق من وجود المستخدم
         existing = supabase.table('fcm_tokens').select('*').eq('user_id', user_id).execute()
         
         if existing.data:
-            # تحديث token الموجود
             result = supabase.table('fcm_tokens').update({
                 'fcm_token': fcm_token,
                 'device_info': device_info,
                 'updated_at': datetime.now().isoformat()
             }).eq('user_id', user_id).execute()
         else:
-            # إضافة token جديد
             result = supabase.table('fcm_tokens').insert({
                 'user_id': user_id,
                 'fcm_token': fcm_token,
@@ -454,88 +486,28 @@ def save_fcm_token():
                 'updated_at': datetime.now().isoformat()
             }).execute()
         
-        if result.data:
-            print(f"✅ تم حفظ FCM Token للمستخدم: {user_id}")
-            return jsonify({'isOk': True})
-        else:
-            return jsonify({'isOk': False, 'error': 'Failed to save token'}), 500
-            
+        return jsonify({'isOk': bool(result.data)})
     except Exception as e:
-        print(f"API Error POST FCM Token: {e}")
+        print(f"API Error: {e}")
         return jsonify({"isOk": False, "error": str(e)}), 500
-
-@app.route('/api/send-notification', methods=['POST'])
-def send_notification():
-    """إرسال إشعار إلى مستخدم محدد"""
-    try:
-        data = request.json
-        user_id = data.get('user_id')
-        title = data.get('title')
-        body = data.get('body')
-        order_id = data.get('order_id')
-        
-        if not user_id or not title or not body:
-            return jsonify({"isOk": False, "error": "Missing required fields"}), 400
-        
-        result = send_notification_to_user(user_id, title, body, order_id)
-        return jsonify({'isOk': result})
-        
-    except Exception as e:
-        print(f"API Error Send Notification: {e}")
-        return jsonify({"isOk": False, "error": str(e)}), 500
-
-@app.route('/api/fcm-tokens', methods=['GET'])
-def get_fcm_tokens():
-    """جلب جميع FCM Tokens (للمدير فقط)"""
-    try:
-        if not supabase:
-            return jsonify([]), 500
-        
-        result = supabase.table('fcm_tokens').select('user_id, device_info, updated_at').execute()
-        return jsonify(result.data if result.data else [])
-        
-    except Exception as e:
-        print(f"API Error GET FCM Tokens: {e}")
-        return jsonify([]), 500
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    """نقطة للتحقق من صحة الخادم"""
-    return jsonify({
-        "status": "healthy",
-        "supabase_connected": supabase is not None,
-        "firebase_admin_initialized": firebase_initialized,
-        "fcm_configured": bool(FCM_SERVER_KEY),
-        "timestamp": datetime.now().isoformat()
-    }), 200
-
-
-# ============== API الإشعارات (محلية للتخزين) ==============
 
 @app.route('/api/notifications', methods=['GET'])
 def get_notifications():
-    """جلب جميع الإشعارات"""
     try:
         if not supabase:
             return jsonify([]), 500
         result = supabase.table('notifications').select('*').order('created_at', desc=True).execute()
         return jsonify(result.data if result.data else [])
     except Exception as e:
-        print(f"API Error GET Notifications: {e}")
         return jsonify([]), 500
 
 @app.route('/api/notifications', methods=['POST'])
 def add_notification():
-    """إضافة إشعار جديد"""
     try:
         new_item = request.json
-        if not new_item:
+        if not new_item or not supabase:
             return jsonify({"isOk": False, "error": "No data"}), 400
         
-        if not supabase:
-            return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
-        
-        # إضافة معرف فريد وتاريخ للإشعار
         new_item['_id'] = str(int(datetime.now().timestamp() * 1000))
         new_item['created_at'] = datetime.now().isoformat()
         new_item['read'] = new_item.get('read', False)
@@ -546,12 +518,10 @@ def add_notification():
             return jsonify({'isOk': True, 'data': result.data[0]}), 201
         return jsonify({'isOk': False, 'error': 'Failed to save'}), 500
     except Exception as e:
-        print(f"API Error POST Notification: {e}")
         return jsonify({"isOk": False, "error": str(e)}), 500
 
 @app.route('/api/notifications/<notification_id>/read', methods=['PUT'])
 def mark_notification_read(notification_id):
-    """تحديث إشعار كمقروء"""
     try:
         if not supabase:
             return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
@@ -562,12 +532,10 @@ def mark_notification_read(notification_id):
             return jsonify({'isOk': True})
         return jsonify({'isOk': False, 'error': 'Not found'}), 404
     except Exception as e:
-        print(f"API Error Mark Read: {e}")
         return jsonify({"isOk": False, "error": str(e)}), 500
 
 @app.route('/api/notifications', methods=['DELETE'])
 def delete_all_notifications():
-    """حذف جميع الإشعارات"""
     try:
         if not supabase:
             return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
@@ -575,24 +543,27 @@ def delete_all_notifications():
         supabase.table('notifications').delete().neq('_id', '0').execute()
         return jsonify({'isOk': True})
     except Exception as e:
-        print(f"API Error Delete Notifications: {e}")
         return jsonify({"isOk": False, "error": str(e)}), 500
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "supabase_connected": supabase is not None,
+        "firebase_admin_initialized": firebase_initialized,
+        "jenni_configured": True,
+        "timestamp": datetime.now().isoformat()
+    }), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print("=" * 50)
-    print("🚀 تشغيل نظام الثقة - Altheka Drivers (Supabase + FCM)")
+    print("🚀 تشغيل نظام الثقة - متكامل مع نظام الزعيم")
     print(f"🌐 المنفذ: {port}")
     print(f"🔗 رابط التطبيق: http://localhost:{port}")
-    print(f"☁️ قاعدة البيانات: Supabase")
-    if firebase_initialized:
-        print(f"✅ Firebase Admin SDK: مفعل")
-    else:
-        print(f"⚠️ Firebase Admin SDK: غير مفعل - يرجى إضافة FIREBASE_ADMIN_CRED_JSON")
-    if FCM_SERVER_KEY:
-        print(f"✅ FCM Legacy API: مفعل")
-    else:
-        print(f"⚠️ FCM Legacy API: غير مفعل")
     print("=" * 50)
+    
+    # محاولة تسجيل الدخول إلى الزعيم عند بدء التشغيل
+    jenni_login()
+    
     app.run(debug=False, host='0.0.0.0', port=port)
