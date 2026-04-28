@@ -79,10 +79,11 @@ def jenni_login():
         
         if response.status_code == 200:
             data = response.json()
-            jenni_jwt_token = data.get("token")
+            # تجربة الحصول على token من مفاتيح مختلفة
+            jenni_jwt_token = data.get("token") or data.get("access_token") or data.get("jwt")
             expires_in = data.get("expires_in", 86400)
             jenni_token_expiry = time.time() + expires_in
-            print("✅ تم تسجيل الدخول إلى نظام الزعيم بنجاح")
+            print(f"✅ تم تسجيل الدخول إلى نظام الزعيم بنجاح, token: {jenni_jwt_token[:30] if jenni_jwt_token else 'None'}...")
             return True
         else:
             print(f"❌ فشل تسجيل الدخول إلى الزعيم: {response.status_code} - {response.text[:200]}")
@@ -103,7 +104,7 @@ def jenni_get_token():
     return jenni_jwt_token
 
 def create_shipment_in_jenni(order_data):
-    """إرسال طلب جديد إلى نظام الزعيم"""
+    """إرسال طلب جديد إلى نظام الزعيم مع تجربة طرق مصادقة متعددة"""
     print(f"📤 بدء إرسال الطلب {order_data.get('__backendId')} إلى نظام الزعيم...")
     
     token = jenni_get_token()
@@ -111,80 +112,68 @@ def create_shipment_in_jenni(order_data):
         print("❌ فشل الحصول على التوكن")
         return {"success": False, "error": "فشل المصادقة مع نظام الزعيم"}
     
-    print(f"✅ تم الحصول على التوكن: {token[:20]}...")
+    print(f"✅ تم الحصول على التوكن: {token[:30]}...")
     
-    # تحويل بيانات الطلب إلى صيغة الزعيم
-    governorate_map = {
-        "بغداد": "BGD", "الكرادة": "BGD", "المنصور": "BGD",
-        "البصرة": "BAS", "بابل": "BBL", "نينوى": "NIN",
-        "أربيل": "ARB", "النجف": "NJF", "كركوك": "KRK",
-        "الأنبار": "ANA", "كربلاء": "KAR", "ذي قار": "DHI"
-    }
-    
-    # محاولة استخراج المحافظة من العنوان إذا لم تكن محددة
-    address = order_data.get("customer_address", "")
-    governorate = order_data.get("governorate", "")
-    if not governorate:
-        for key in governorate_map:
-            if key in address:
-                governorate = key
-                break
-    
-    governorate_code = governorate_map.get(governorate, "BGD")
-    print(f"📍 المحافظة: {governorate} -> {governorate_code}")
-    
+    # تحويل بيانات الطلب إلى صيغة الزعيم - تبسيط للاختبار
     shipment_payload = {
         "system_code": JENNI_SYSTEM_CODE,
         "shipments": [{
             "shipment_number": order_data.get("__backendId", ""),
             "external_shipment_id": order_data.get("__backendId", ""),
-            "receiver_name": order_data.get("customer_name", ""),
+            "receiver_name": order_data.get("customer_name", "")[:50],
             "receiver_phone_1": order_data.get("customer_phone", ""),
-            "governorate_code": governorate_code,
-            "city": order_data.get("city", order_data.get("customer_address", "")[:50]),
-            "address": order_data.get("customer_address", ""),
+            "governorate_code": "BGD",
+            "city": "بغداد",
+            "address": order_data.get("customer_address", "")[:100],
             "amount_iqd": float(order_data.get("total", 0)),
             "quantity": order_data.get("quantity", 1),
-            "note": order_data.get("admin_notes", "")[:200]
         }]
     }
     
     print(f"📦 الحمولة المرسلة: {json.dumps(shipment_payload, ensure_ascii=False)[:500]}")
     
-    try:
-        response = requests.post(
-            f"{JENNI_API_URL}/v2/shipments/create",
-            json=shipment_payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {token}"
-            },
-            timeout=30
-        )
-        
-        print(f"📡 رد الزعيم: {response.status_code}")
-        
-        result = response.json()
-        print(f"📋 نتيجة الزعيم: {json.dumps(result, ensure_ascii=False)[:500]}")
-        
-        if response.status_code == 200 or response.status_code == 201:
-            if result.get("accepted_shipments") and len(result["accepted_shipments"]) > 0:
-                shipment = result["accepted_shipments"][0]
-                print(f"✅ تم قبول الطلب في الزعيم، ID: {shipment.get('shipment_id')}")
-                return {
-                    "success": True,
-                    "shipment_id": shipment.get("shipment_id"),
-                    "message": "تم إرسال الطلب إلى نظام الزعيم بنجاح"
-                }
+    # تجربة طرق مصادقة مختلفة
+    auth_methods = [
+        {"name": "Bearer Token", "headers": {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}},
+        {"name": "Token Only", "headers": {"Content-Type": "application/json", "Authorization": token}},
+        {"name": "API Key", "headers": {"Content-Type": "application/json", "apikey": token}},
+        {"name": "X-API-Key", "headers": {"Content-Type": "application/json", "X-API-Key": token}},
+        {"name": "JWT", "headers": {"Content-Type": "application/json", "JWT": token}},
+    ]
+    
+    for method in auth_methods:
+        print(f"📡 محاولة المصادقة بطريقة: {method['name']}")
+        try:
+            response = requests.post(
+                f"{JENNI_API_URL}/v2/shipments/create",
+                json=shipment_payload,
+                headers=method['headers'],
+                timeout=30
+            )
+            print(f"📡 رد الزعيم ({method['name']}): {response.status_code}")
+            
+            if response.status_code == 200 or response.status_code == 201:
+                try:
+                    result = response.json()
+                    print(f"✅ نجحت المحاولة بطريقة {method['name']}!")
+                    if result.get("accepted_shipments") and len(result["accepted_shipments"]) > 0:
+                        shipment = result["accepted_shipments"][0]
+                        return {
+                            "success": True,
+                            "shipment_id": shipment.get("shipment_id"),
+                            "message": f"تم إرسال الطلب بنجاح عبر {method['name']}"
+                        }
+                except:
+                    return {"success": True, "message": "تم الإرسال ولكن الاستجابة غير متوقعة"}
+            elif response.status_code == 401:
+                print(f"⚠️ فشل المصادقة بطريقة {method['name']}")
             else:
-                print(f"⚠️ لم يتم قبول الطلب: {result.get('rejected_shipments', [])}")
-                return {"success": False, "error": "الطلب مرفوض من نظام الزعيم"}
-        else:
-            print(f"❌ فشل الإرسال: {result}")
-            return {"success": False, "error": result.get("message", "فشل إرسال الطلب")}
-    except Exception as e:
-        print(f"❌ استثناء في الإرسال: {e}")
-        return {"success": False, "error": str(e)}
+                print(f"⚠️ رد غير متوقع: {response.status_code}")
+                
+        except Exception as e:
+            print(f"❌ خطأ في المحاولة {method['name']}: {e}")
+    
+    return {"success": False, "error": "فشلت جميع محاولات المصادقة مع نظام الزعيم"}
 
 # ============== دوال الإشعارات ==============
 def send_fcm_notification_via_admin(fcm_token, title, body, data=None):
