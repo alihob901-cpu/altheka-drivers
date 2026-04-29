@@ -1,14 +1,4 @@
-﻿حيدر كلبي الأخطاء ضروري تتعدل
-1.المحافظه والمنطقة او الحي كون تضيفه يدوي واحنه نختار مثل برنامج الزعيم ضايفين عدة مناطق وعدة محافظات واحنه نختار منها مكان الزبون 
-
-
-2.الطلب من نرفعه بالبرنامج مالتك اذا صار بي خطأ كون قابل للتعديل وقابل للحذف وضروري ينحذف من الزعيم ايضا الي جاي يصير من تحذفه من البرنامج ماينحذف من الزعيم
-
-3.السعر جاي يتضاعف من تزيد عدد القطع اني اريده ثابت السعر الي نكتبه كون نفسه يبقى 
-
-عدل الكود وارسله لي بالكامل 
-
-<!doctype html>
+﻿<!doctype html>
 <html lang="ar" dir="rtl" class="h-full">
 <head>
   <meta charset="UTF-8">
@@ -25,7 +15,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"></script>
   
   <style>
-    /* جميع الأنماط السابقة كما هي */
     html, body { height: 100%; margin: 0; }
     * { font-family: 'Tajawal', sans-serif; }
     .sidebar-item { transition: all 0.2s; }
@@ -46,137 +35,30 @@
     .modal-overlay { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
     .agent-card { cursor: pointer; transition: all 0.2s; }
     .agent-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .animate-fade-in-up {
-      animation: fadeInUp 0.3s ease-out;
-    }
-    .flower-top {
-      position: fixed;
-      pointer-events: none;
-      z-index: 9999;
-      font-size: 24px;
-      animation: floatDown 4s ease-out forwards;
-    }
-    @keyframes floatDown {
-      0% { opacity: 1; transform: translateY(-50px) rotate(0deg); }
-      100% { opacity: 0; transform: translateY(calc(100vh + 100px)) rotate(360deg); }
-    }
-    .balloon {
-      position: fixed;
-      pointer-events: none;
-      z-index: 9998;
-      font-size: 30px;
-      animation: floatUp 4s ease-out forwards;
-    }
-    @keyframes floatUp {
-      0% { opacity: 1; transform: translateY(calc(100vh + 50px)) rotate(0deg); }
-      100% { opacity: 0; transform: translateY(-100px) rotate(360deg); }
-    }
-    .note-full {
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-width: 300px;
-    }
-    .clickable-note {
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .clickable-note:hover {
-      color: #60a5fa;
-      text-decoration: underline;
-    }
-    .copyable {
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .copyable:hover {
-      color: #34d399;
-      text-decoration: underline;
-    }
-    @keyframes pulse-ring {
-      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
-      70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
-      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
-    }
-    .notification-badge {
-      animation: pulse-ring 1.5s infinite;
-    }
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateX(50px); }
-      to { opacity: 1; transform: translateX(0); }
-    }
-    .notification-item {
-      animation: slideIn 0.3s ease-out;
-    }
-    
-    /* واجهة الإشعارات للهواتف */
-    .notification-panel-mobile {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 90%;
-      max-width: 400px;
-      max-height: 80vh;
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 1.5rem;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .notification-panel-mobile .panel-header {
-      padding: 1rem;
-      border-bottom: 1px solid #1e293b;
-      background: #0f172a;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .notification-panel-mobile .panel-content {
-      flex: 1;
-      overflow-y: auto;
-      max-height: 60vh;
-    }
-    .notification-panel-mobile .panel-footer {
-      padding: 0.75rem;
-      border-top: 1px solid #1e293b;
-      background: #0f172a;
-    }
-    @media (max-width: 640px) {
-      .notification-panel-mobile { width: 95%; max-height: 85vh; border-radius: 1rem; }
-      .notification-panel-mobile .panel-content { max-height: 65vh; }
-    }
-    .notification-backdrop {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.7);
-      backdrop-filter: blur(4px);
-      z-index: 999;
-    }
-    
-    /* أنماط المخزن */
-    .inventory-item {
-      transition: all 0.2s;
-    }
-    .inventory-item:hover {
-      background: rgba(255,255,255,0.05);
-    }
-    .inventory-actions {
-      opacity: 0.7;
-      transition: opacity 0.2s;
-    }
-    .inventory-item:hover .inventory-actions {
-      opacity: 1;
-    }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in-up { animation: fadeInUp 0.3s ease-out; }
+    .flower-top { position: fixed; pointer-events: none; z-index: 9999; font-size: 24px; animation: floatDown 4s ease-out forwards; }
+    @keyframes floatDown { 0% { opacity: 1; transform: translateY(-50px) rotate(0deg); } 100% { opacity: 0; transform: translateY(calc(100vh + 100px)) rotate(360deg); } }
+    .balloon { position: fixed; pointer-events: none; z-index: 9998; font-size: 30px; animation: floatUp 4s ease-out forwards; }
+    @keyframes floatUp { 0% { opacity: 1; transform: translateY(calc(100vh + 50px)) rotate(0deg); } 100% { opacity: 0; transform: translateY(-100px) rotate(360deg); } }
+    .clickable-note { cursor: pointer; transition: all 0.2s; }
+    .clickable-note:hover { color: #60a5fa; text-decoration: underline; }
+    .copyable { cursor: pointer; transition: all 0.2s; }
+    .copyable:hover { color: #34d399; text-decoration: underline; }
+    @keyframes pulse-ring { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } }
+    .notification-badge { animation: pulse-ring 1.5s infinite; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(50px); } to { opacity: 1; transform: translateX(0); } }
+    .notification-item { animation: slideIn 0.3s ease-out; }
+    .notification-panel-mobile { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 400px; max-height: 80vh; background: #0f172a; border: 1px solid #334155; border-radius: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); z-index: 1000; display: flex; flex-direction: column; overflow: hidden; }
+    .notification-panel-mobile .panel-header { padding: 1rem; border-bottom: 1px solid #1e293b; background: #0f172a; display: flex; justify-content: space-between; align-items: center; }
+    .notification-panel-mobile .panel-content { flex: 1; overflow-y: auto; max-height: 60vh; }
+    .notification-panel-mobile .panel-footer { padding: 0.75rem; border-top: 1px solid #1e293b; background: #0f172a; }
+    @media (max-width: 640px) { .notification-panel-mobile { width: 95%; max-height: 85vh; border-radius: 1rem; } .notification-panel-mobile .panel-content { max-height: 65vh; } }
+    .notification-backdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); z-index: 999; }
+    .inventory-item { transition: all 0.2s; }
+    .inventory-item:hover { background: rgba(255,255,255,0.05); }
+    .inventory-actions { opacity: 0.7; transition: opacity 0.2s; }
+    .inventory-item:hover .inventory-actions { opacity: 1; }
   </style>
 </head>
 <body class="h-full bg-slate-950 text-slate-100">
@@ -192,25 +74,20 @@ const firebaseConfig = {
   appId: "1:150648020047:web:c5051941de6f2e81ee9e3a",
   measurementId: "G-L7S5XKN42N"
 };
-
 const VAPID_KEY = "BA2ONQejtLqvY0xKKIy0WaG3SAc1CCVm1xqvUhHI1gzxxlqGq65sGei8OroEqAK1haxQygk_2cp8Ugf-jyt3tWA";
-
-// الربح الثابت للمندوب (افتراضي 1000 دينار)
 const DEFAULT_AGENT_PROFIT = 1000;
 
-// تهيئة Firebase
+// قائمة المحافظات (مثل نظام الزعيم)
+const GOVERNORATES = ['بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء', 'ذي قار', 'ميسان', 'بابل', 'واسط', 'صلاح الدين', 'ديالى', 'المثنى', 'القادسية'];
+
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-// ============== دالة حفظ FCM Token في الخادم ==============
 async function saveTokenToServer(token) {
     let userId = 'admin';
     if (currentUser) {
-        if (currentUser.agent_code) {
-            userId = currentUser.agent_code;
-        } else if (currentUser.type === 'admin') {
-            userId = 'admin';
-        }
+        if (currentUser.agent_code) userId = currentUser.agent_code;
+        else if (currentUser.type === 'admin') userId = 'admin';
     }
     try {
         const response = await fetch('/api/fcm-token', {
@@ -218,66 +95,30 @@ async function saveTokenToServer(token) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: userId, fcm_token: token })
         });
-        if (response.ok) console.log('✅ تم حفظ FCM Token في الخادم للمستخدم:', userId);
-    } catch (error) { console.error('❌ خطأ في حفظ FCM Token:', error); }
+        if (response.ok) console.log('✅ تم حفظ FCM Token');
+    } catch (error) { console.error('❌ خطأ:', error); }
 }
 
-// ============== طلب إذن الإشعارات عند تحميل الصفحة (معدل) ==============
 async function requestNotificationPermission() {
   try {
-    // طلب الإذن من المستخدم
     const permission = await Notification.requestPermission();
-    
     if (permission === 'granted') {
-      console.log('✅ تم منح إذن الإشعارات');
-      
-      // الحصول على FCM Token
       const token = await messaging.getToken({ vapidKey: VAPID_KEY });
       if (token) {
-        console.log('✅ FCM Token:', token);
         localStorage.setItem('fcm_token', token);
-        
-        // إذا كان هناك مستخدم مسجل دخوله، نحفظ token في الخادم
-        if (currentUser) {
-          await saveTokenToServer(token);
-        }
+        if (currentUser) await saveTokenToServer(token);
       }
-      
-      // استقبال الإشعارات عندما تكون الصفحة مفتوحة
       messaging.onMessage((payload) => {
-        console.log('📨 إشعار واصل:', payload);
-        if (typeof showToast === 'function') {
-          showToast(`🔔 ${payload.notification?.title}: ${payload.notification?.body}`);
-        }
-        if (typeof addNotification === 'function') {
-          addNotification(
-            payload.notification?.title || 'تنبيه',
-            payload.notification?.body || 'لديك إشعار جديد',
-            'firebase'
-          );
-        }
+        if (typeof showToast === 'function') showToast(`🔔 ${payload.notification?.title}`);
+        if (typeof addNotification === 'function') addNotification(payload.notification?.title || 'تنبيه', payload.notification?.body || 'لديك إشعار جديد', 'firebase');
       });
-      
-    } else {
-      console.log('❌ لم يتم منح إذن الإشعارات');
     }
-  } catch (error) {
-    console.error('❌ خطأ في طلب الإذن:', error);
-  }
+  } catch (error) { console.error('❌ خطأ:', error); }
 }
 
-// ============== دالة التهيئة القديمة (للتوافق) ==============
-async function initFirebaseNotifications() {
-  await requestNotificationPermission();
-}
-
-// ============== حفظ حالة تسجيل الدخول ==============
 function saveLoginState() {
-    if (currentUser) {
-        localStorage.setItem('trust_login_state', JSON.stringify({ user: currentUser, isAgentMode: isAgentMode, timestamp: Date.now() }));
-    }
+    if (currentUser) localStorage.setItem('trust_login_state', JSON.stringify({ user: currentUser, isAgentMode: isAgentMode, timestamp: Date.now() }));
 }
-
 function loadLoginState() {
     const saved = localStorage.getItem('trust_login_state');
     if (saved) {
@@ -287,19 +128,15 @@ function loadLoginState() {
                 currentUser = loginData.user;
                 isAgentMode = loginData.isAgentMode;
                 return true;
-            } else { localStorage.removeItem('trust_login_state'); }
-        } catch(e) { console.log('خطأ في تحميل حالة تسجيل الدخول'); }
+            } else localStorage.removeItem('trust_login_state');
+        } catch(e) {}
     }
     return false;
 }
 function clearLoginState() { localStorage.removeItem('trust_login_state'); }
 
-// ============== بدء التشغيل (طلب الإشعارات فوراً) ==============
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // طلب إذن الإشعارات فوراً (حتى قبل تسجيل الدخول)
-    requestNotificationPermission();
-  });
+  window.addEventListener('load', () => { requestNotificationPermission(); });
 }
 </script>
 
@@ -414,17 +251,12 @@ if ('serviceWorker' in navigator) {
       <div class="bg-slate-900 border border-slate-800 rounded-xl p-6"><h3 class="font-700 mb-4">سجل العملاء</h3><div id="customersDetail" class="text-center text-slate-500">ستظهر بيانات العملاء تلقائياً عند إضافة الطلبات</div></div>
     </div>
 
-    <!-- Inventory Page (معدل مع أزرار المسح) -->
+    <!-- Inventory Page -->
     <div id="page-inventory" class="page-content p-6 fade-in hidden">
       <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <div class="flex justify-between items-center mb-6 flex-wrap gap-3">
-          <div>
-            <i data-lucide="package" style="width:32px;height:32px;color:#f59e0b" class="inline-block ml-2"></i>
-            <h3 class="font-700 text-lg inline-block">إدارة المخزن</h3>
-          </div>
-          <button onclick="clearAllInventory()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition">
-            <i data-lucide="trash-2" style="width:16px;height:16px"></i> مسح المخزن بالكامل
-          </button>
+          <div><i data-lucide="package" style="width:32px;height:32px;color:#f59e0b" class="inline-block ml-2"></i><h3 class="font-700 text-lg inline-block">إدارة المخزن</h3></div>
+          <button onclick="clearAllInventory()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition"><i data-lucide="trash-2" style="width:16px;height:16px"></i> مسح المخزن بالكامل</button>
         </div>
         <p class="text-slate-500 text-sm mb-6">يتم تتبع المنتجات تلقائياً من خلال الطلبات المسجلة</p>
         <div id="inventoryList" class="space-y-2"></div>
@@ -457,7 +289,19 @@ if ('serviceWorker' in navigator) {
 </div>
 
 <!-- Modals -->
-<div id="orderModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeOrderModal()"></div><div class="absolute inset-y-0 left-0 w-full max-w-md bg-slate-900 border-r border-slate-800 overflow-auto shadow-2xl"><div class="p-5 border-b border-slate-800 flex justify-between"><h3 class="font-700 text-lg">➕ طلب جديد</h3><button onclick="closeOrderModal()"><i data-lucide="x"></i></button></div><form id="orderForm" onsubmit="handleOrderSubmit(event)" class="p-5 space-y-4"><div><label class="block text-sm text-slate-400 mb-1">👤 اسم الزبون</label><input id="f_name" required placeholder="أدخل اسم الزبون" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📞 رقم الهاتف</label><input id="f_phone" required placeholder="أدخل رقم الهاتف" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📍 العنوان</label><input id="f_address" required placeholder="أدخل العنوان" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📦 المنتج</label><input id="f_product" required placeholder="اسم المنتج" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div class="grid grid-cols-2 gap-3"><div><label class="block text-sm text-slate-400 mb-1">🔢 الكمية</label><input id="f_qty" type="number" value="1" placeholder="الكمية" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">💰 السعر (د.ع)</label><input id="f_price" type="number" required placeholder="السعر" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div></div><div><label class="block text-sm text-slate-400 mb-1">📅 التاريخ</label><input id="f_date" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📌 ملاحظة (اختياري)</label><textarea id="f_note" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 resize-none" placeholder="أضف ملاحظة للطلب..."></textarea></div><button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-3 rounded-lg font-700 mt-4">💾 حفظ الطلب</button></form></div></div>
+<div id="orderModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeOrderModal()"></div><div class="absolute inset-y-0 left-0 w-full max-w-md bg-slate-900 border-r border-slate-800 overflow-auto shadow-2xl"><div class="p-5 border-b border-slate-800 flex justify-between"><h3 class="font-700 text-lg">➕ طلب جديد</h3><button onclick="closeOrderModal()"><i data-lucide="x"></i></button></div><form id="orderForm" onsubmit="handleOrderSubmit(event)" class="p-5 space-y-4">
+  <div><label class="block text-sm text-slate-400 mb-1">👤 اسم الزبون</label><input id="f_name" required placeholder="أدخل اسم الزبون" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+  <div><label class="block text-sm text-slate-400 mb-1">📞 رقم الهاتف</label><input id="f_phone" required placeholder="أدخل رقم الهاتف" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+  <div class="grid grid-cols-2 gap-3">
+    <div><label class="block text-sm text-slate-400 mb-1">📍 المحافظة</label><select id="f_governorate" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"><option value="">اختر المحافظة</option>${GOVERNORATES.map(g => `<option value="${g}">${g}</option>`).join('')}</select></div>
+    <div><label class="block text-sm text-slate-400 mb-1">🏘️ المنطقة/الحي</label><input id="f_district" required placeholder="المنطقة أو الحي" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+  </div>
+  <div><label class="block text-sm text-slate-400 mb-1">📦 المنتج</label><input id="f_product" required placeholder="اسم المنتج" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+  <div class="grid grid-cols-2 gap-3"><div><label class="block text-sm text-slate-400 mb-1">🔢 الكمية</label><input id="f_qty" type="number" value="1" placeholder="الكمية" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">💰 السعر (د.ع)</label><input id="f_price" type="number" required placeholder="السعر" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div></div>
+  <div><label class="block text-sm text-slate-400 mb-1">📅 التاريخ</label><input id="f_date" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+  <div><label class="block text-sm text-slate-400 mb-1">📌 ملاحظة (اختياري)</label><textarea id="f_note" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 resize-none" placeholder="أضف ملاحظة للطلب..."></textarea></div>
+  <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-3 rounded-lg font-700 mt-4">💾 حفظ الطلب</button>
+</form></div></div>
 
 <div id="editDateModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditDateModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl"><h3 class="font-700 text-lg mb-4">📅 تعديل تاريخ الطلب</h3><p id="editDateCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p><input id="editDateInput" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 mb-4"><div class="flex gap-3"><button onclick="closeEditDateModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button onclick="confirmEditDate()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ</button></div></div></div>
 
@@ -466,8 +310,6 @@ if ('serviceWorker' in navigator) {
 <div id="editAgentModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditAgentModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl"><h3 class="font-700 text-lg mb-4">✏️ تعديل بيانات المندوب</h3><div class="space-y-3"><div class="bg-slate-800 rounded-lg p-3"><p class="text-slate-400 text-sm">🆔 كود المندوب</p><p id="editAgentId" class="text-white font-bold">-</p></div><div class="bg-slate-800 rounded-lg p-3"><p class="text-slate-400 text-sm">👤 اسم المندوب</p><p id="editAgentName" class="text-white font-bold">-</p></div><div class="bg-slate-800 rounded-lg p-3"><p class="text-slate-400 text-sm">🔑 كود الدخول</p><p id="editAgentCode" class="text-white font-bold">-</p></div><div><label class="block text-slate-400 text-sm mb-1">💰 الربح الثابت لكل طلب (د.ع)</label><input id="editAgentProfit" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div></div><div class="flex gap-3 mt-6"><button onclick="closeEditAgentModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg">إلغاء</button><button onclick="saveEditAgent()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ التعديلات</button></div></div></div>
 
 <div id="editNoteModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditNoteModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl"><h3 class="font-700 text-lg mb-4">📌 تعديل ملاحظة الطلب</h3><p id="editNoteCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p><textarea id="editNoteInput" rows="4" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 resize-none mb-4" placeholder="أضف ملاحظة للإدارة..."></textarea><div class="flex gap-3"><button onclick="closeEditNoteModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button onclick="confirmEditNote()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ الملاحظة</button></div></div></div>
-
-<div id="addNotesModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeAddNotesModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl"><h3 class="font-700 text-lg mb-4">📌 إضافة ملاحظة</h3><textarea id="addNotesInput" rows="4" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 resize-none mb-4" placeholder="أضف ملاحظة للإدارة..."></textarea><div class="flex gap-3"><button onclick="closeAddNotesModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg">إلغاء</button><button onclick="submitAddNotes()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">إرسال</button></div></div></div>
 
 <div id="deleteConfirm" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeDeleteConfirm()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80 text-center"><i data-lucide="trash-2" style="width:40px;height:40px;color:#ef4444" class="mx-auto mb-3"></i><p id="deleteConfirmText" class="font-700 mb-4">حذف العنصر؟</p><div class="flex gap-3"><button onclick="closeDeleteConfirm()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button id="confirmDeleteBtn" onclick="confirmDelete()" class="flex-1 bg-red-600 hover:bg-red-700 py-2 rounded-lg">حذف</button></div></div></div>
 
@@ -487,11 +329,9 @@ let editingAgentId = null;
 let pendingDeleteRecord = null;
 let pendingStatusRecord = null;
 let editingProfitOrderId = null;
-let pendingNotesOrderId = null;
 let currentEditAgent = null;
 let editingDateOrderId = null;
 let editingNoteOrderId = null;
-let inventoryData = {};  // تخزين بيانات المخزن بشكل منفصل
 
 // ============== نظام الإشعارات ==============
 let notifications = [];
@@ -501,7 +341,7 @@ let notificationPanelOpen = false;
 function saveNotificationsToStorage() { localStorage.setItem('trust_system_notifications', JSON.stringify(notifications)); }
 function loadNotificationsFromStorage() {
     const stored = localStorage.getItem('trust_system_notifications');
-    if (stored) { try { notifications = JSON.parse(stored); updateNotificationUI(); } catch(e) { console.log("خطأ في تحميل الإشعارات"); } }
+    if (stored) { try { notifications = JSON.parse(stored); updateNotificationUI(); } catch(e) {} }
 }
 function generateDataHash() { return JSON.stringify(allOrders.map(o => ({ id: o.__backendId, status: o.status, admin_notes: o.admin_notes, updated_at: o.updated_at || o.created_at }))); }
 
@@ -515,7 +355,6 @@ function addNotification(title, message, type, orderId = null) {
   saveNotificationsToStorage();
   if (!notificationPanelOpen) { const btn = document.getElementById('notificationBtn'); if (btn) { btn.classList.add('notification-badge'); setTimeout(() => btn.classList.remove('notification-badge'), 2000); } }
   showToast(`🔔 ${title}`);
-  if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(200);
 }
 
 function updateNotificationUI() {
@@ -528,7 +367,7 @@ function renderNotificationPanel() {
   const listEl = document.getElementById('notificationsList');
   if (!listEl) return;
   if (notifications.length === 0) { listEl.innerHTML = '<div class="p-4 text-center text-slate-500">📭 لا توجد إشعارات</div>'; return; }
-  listEl.innerHTML = notifications.map(n => `<div class="notification-item p-3 hover:bg-slate-800/50 transition cursor-pointer ${!n.read ? 'bg-slate-800/30' : ''}" onclick="markNotificationRead(${n.id})"><div class="flex items-start gap-2"><div class="text-lg">${n.type === 'order' ? '📦' : n.type === 'note' ? '📌' : n.type === 'status' ? '🔔' : n.type === 'agent' ? '👤' : '🔔'}</div><div class="flex-1"><p class="text-sm font-semibold ${!n.read ? 'text-amber-400' : 'text-slate-300'}">${n.title}</p><p class="text-xs text-slate-400">${n.message}</p><p class="text-xs text-slate-500 mt-1">${n.time}</p></div>${!n.read ? '<div class="w-2 h-2 bg-amber-500 rounded-full mt-2"></div>' : ''}</div></div>`).join('');
+  listEl.innerHTML = notifications.map(n => `<div class="notification-item p-3 hover:bg-slate-800/50 transition cursor-pointer ${!n.read ? 'bg-slate-800/30' : ''}" onclick="markNotificationRead(${n.id})"><div class="flex items-start gap-2"><div class="text-lg">${n.type === 'order' ? '📦' : n.type === 'note' ? '📌' : '🔔'}</div><div class="flex-1"><p class="text-sm font-semibold ${!n.read ? 'text-amber-400' : 'text-slate-300'}">${n.title}</p><p class="text-xs text-slate-400">${n.message}</p><p class="text-xs text-slate-500 mt-1">${n.time}</p></div>${!n.read ? '<div class="w-2 h-2 bg-amber-500 rounded-full mt-2"></div>' : ''}</div></div>`).join('');
 }
 
 function markNotificationRead(id) {
@@ -536,7 +375,6 @@ function markNotificationRead(id) {
   if (notification) { notification.read = true; updateNotificationUI(); saveNotificationsToStorage(); }
   if (notification && notification.orderId) { closeNotifications(); switchPage('orders'); }
 }
-function markAllNotificationsRead() { notifications.forEach(n => n.read = true); updateNotificationUI(); saveNotificationsToStorage(); }
 function clearAllNotifications() { notifications = []; updateNotificationUI(); saveNotificationsToStorage(); closeNotifications(); showToast('🗑️ تم مسح جميع الإشعارات'); }
 
 function toggleNotifications() {
@@ -547,7 +385,9 @@ function toggleNotifications() {
   document.body.appendChild(panel);
   renderNotificationPanel();
   notificationPanelOpen = true;
-  markAllNotificationsRead();
+  notifications.forEach(n => n.read = true);
+  updateNotificationUI();
+  saveNotificationsToStorage();
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 function closeNotifications() {
@@ -555,34 +395,20 @@ function closeNotifications() {
   if (backdrop) backdrop.remove(); if (panel) panel.remove(); notificationPanelOpen = false;
 }
 
-document.addEventListener('click', function(e) {
-  if (notificationPanelOpen) { const panel = document.getElementById('notification-panel'); const backdrop = document.getElementById('notification-backdrop'); if (panel && !panel.contains(e.target) && backdrop && e.target !== backdrop) {} }
-  const sidebar = document.getElementById('sidebar'); const menuButton = document.querySelector('button[onclick="toggleSidebar()"]');
-  if (window.innerWidth < 1024 && sidebar && !sidebar.classList.contains('hidden')) {
-    if (!sidebar.contains(e.target) && (!menuButton || !menuButton.contains(e.target))) sidebar.classList.add('hidden');
-  }
-});
-
-function checkForDataChanges() {
-  if (!allOrders.length && !allAgents.length) return;
-  const currentHash = generateDataHash();
-  if (lastDataHash !== null && lastDataHash !== currentHash && currentUser && !isAgentMode) {
-    console.log("📢 تم اكتشاف تغيير في البيانات!");
-    const oldOrders = JSON.parse(lastDataHash); const newOrders = JSON.parse(currentHash);
-    for (const newOrder of newOrders) {
-      const oldOrder = oldOrders.find(o => o.id === newOrder.id);
-      if (!oldOrder) { const order = allOrders.find(o => o.__backendId === newOrder.id); if (order) addNotification('طلب جديد', `تم إضافة طلب جديد للزبون ${order.customer_name}`, 'order', order.__backendId); }
-      else if (oldOrder.status !== newOrder.status) { const order = allOrders.find(o => o.__backendId === newOrder.id); if (order) addNotification('تغيير حالة', `تم تغيير حالة طلب ${order.customer_name} إلى ${order.status}`, 'status', order.__backendId); }
-      else if (oldOrder.admin_notes !== newOrder.admin_notes && newOrder.admin_notes && (!oldOrder.admin_notes || newOrder.admin_notes !== oldOrder.admin_notes)) { const order = allOrders.find(o => o.__backendId === newOrder.id); if (order) addNotification('ملاحظة جديدة', `تم إضافة ملاحظة لطلب ${order.customer_name}`, 'note', order.__backendId); }
-    }
-  }
-  lastDataHash = currentHash;
+// ============== دالة حذف الطلب من نظام الزعيم ==============
+async function deleteFromJenni(shipmentNumber) {
+  try {
+    const response = await fetch(`/api/delete-from-jenni/${shipmentNumber}`, { method: 'DELETE' });
+    const result = await response.json();
+    if (result.success) { console.log('✅ تم حذف الشحنة من الزعيم'); return true; }
+    else { console.log('⚠️ فشل حذف الزعيم:', result.error); return false; }
+  } catch (error) { console.error('❌ خطأ:', error); return false; }
 }
 
 // ============== DATA SDK ==============
 const dataHandler = {
   onDataChanged(data) {
-    console.log("🔔 [DATA] تحديث البيانات من الخادم");
+    console.log("🔔 [DATA] تحديث البيانات");
     const allOrdersRaw = data.filter(d => d.type === 'order' || !d.type);
     allAgents = data.filter(d => d.type === 'agent');
     if (isAgentMode && currentUser) {
@@ -602,28 +428,22 @@ const dataHandler = {
     }
   }
 };
-const originalOnDataChanged = dataHandler.onDataChanged;
-dataHandler.onDataChanged = function(data) { originalOnDataChanged(data); checkForDataChanges(); };
 window.dataSdk.init(dataHandler);
 
 function createFlowersFromTop() {
-  const flowers = ['🌸', '🌼', '🌻', '🌺', '🌸', '🌷', '🌹', '🌸', '🌼', '🌻', '💐', '🌸'];
-  for (let i = 0; i < 40; i++) { setTimeout(() => { const flower = document.createElement('div'); flower.className = 'flower-top'; flower.textContent = flowers[Math.floor(Math.random() * flowers.length)]; flower.style.left = Math.random() * window.innerWidth + 'px'; flower.style.top = '-50px'; flower.style.fontSize = (Math.random() * 20 + 20) + 'px'; flower.style.animationDuration = (Math.random() * 2 + 2.5) + 's'; flower.style.animationDelay = Math.random() * 0.3 + 's'; document.body.appendChild(flower); setTimeout(() => flower.remove(), 4000); }, i * 80); }
-}
-function createBalloonsAndFlowers() {
-  const balloons = ['🎈', '🎈', '🎈', '🎈', '🎈', '🎉', '✨', '🌟']; const flowers = ['🌸', '🌼', '🌻', '🌺', '🌷', '🌹'];
-  for (let i = 0; i < 45; i++) { setTimeout(() => { const isBalloon = Math.random() > 0.5; const element = document.createElement('div'); element.className = isBalloon ? 'balloon' : 'flower-top'; element.textContent = isBalloon ? balloons[Math.floor(Math.random() * balloons.length)] : flowers[Math.floor(Math.random() * flowers.length)]; element.style.left = Math.random() * window.innerWidth + 'px'; if (isBalloon) { element.style.bottom = '-50px'; element.style.top = 'auto'; element.style.fontSize = (Math.random() * 20 + 25) + 'px'; element.style.animationDuration = (Math.random() * 2 + 3) + 's'; } else { element.style.top = '-50px'; element.style.fontSize = (Math.random() * 20 + 20) + 'px'; element.style.animationDuration = (Math.random() * 2 + 2.5) + 's'; } element.style.animationDelay = Math.random() * 0.5 + 's'; document.body.appendChild(element); setTimeout(() => element.remove(), 4000); }, i * 70); }
+  const flowers = ['🌸', '🌼', '🌻', '🌺', '🌸', '🌷', '🌹'];
+  for (let i = 0; i < 30; i++) { setTimeout(() => { const flower = document.createElement('div'); flower.className = 'flower-top'; flower.textContent = flowers[Math.floor(Math.random() * flowers.length)]; flower.style.left = Math.random() * window.innerWidth + 'px'; flower.style.top = '-50px'; flower.style.fontSize = (Math.random() * 20 + 20) + 'px'; flower.style.animationDuration = (Math.random() * 2 + 2.5) + 's'; flower.style.animationDelay = Math.random() * 0.3 + 's'; document.body.appendChild(flower); setTimeout(() => flower.remove(), 4000); }, i * 80); }
 }
 
 function showProgrammerInfo() {
   const modal = document.createElement('div'); modal.className = 'fixed inset-0 z-[200] flex items-center justify-center p-4'; modal.style.backgroundColor = 'rgba(0,0,0,0.7)'; modal.style.backdropFilter = 'blur(8px)';
-  modal.innerHTML = `<div class="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-emerald-500/30 animate-fade-in-up"><div class="text-center"><div class="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4"><i data-lucide="code-2" style="width:40px;height:40px;color:#10b981"></i></div><h2 class="text-2xl font-bold text-emerald-400 mb-2">👨‍💻 المهندس حيدر</h2><p class="text-slate-400 text-sm mb-4">مطور ومصمم النظام</p><div class="space-y-3 mt-4 text-right"><div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><i data-lucide="user" style="width:20px;height:20px;color:#60a5fa"></i><div class="flex-1"><p class="text-slate-400 text-xs">الاسم الكامل</p><p class="text-white font-bold text-lg">حيدر علي</p></div></div><div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3 group cursor-pointer" onclick='copyToClipboard("07813824203")'><i data-lucide="phone" style="width:20px;height:20px;color:#34d399"></i><div class="flex-1"><p class="text-slate-400 text-xs">رقم الهاتف <span class="text-emerald-400 text-xs mr-2">(اضغط للنسخ)</span></p><p class="text-white font-bold text-lg dir-ltr">07813824203</p></div></div><div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3 group cursor-pointer" onclick='copyToClipboard("haider171700@gmail.com")'><i data-lucide="mail" style="width:20px;height:20px;color:#f472b6"></i><div class="flex-1"><p class="text-slate-400 text-xs">البريد الإلكتروني <span class="text-emerald-400 text-xs mr-2">(اضغط للنسخ)</span></p><p class="text-white text-sm">haider171700@gmail.com</p></div></div><div class="bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/30"><p class="text-emerald-400 text-sm text-center">✨مركز الثقة للمنتجات والبضائع العالمية ✨</p><p class="text-slate-500 text-xs text-center mt-1">© 2026 جميع الحقوق محفوظة</p></div></div><button onclick="this.closest('.fixed').remove()" class="mt-6 w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-2"><i data-lucide="x" style="width:18px;height:18px"></i> إغلاق</button></div></div>`;
-  document.body.appendChild(modal); lucide.createIcons(); createBalloonsAndFlowers(); modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.innerHTML = `<div class="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-emerald-500/30 animate-fade-in-up"><div class="text-center"><div class="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4"><i data-lucide="code-2" style="width:40px;height:40px;color:#10b981"></i></div><h2 class="text-2xl font-bold text-emerald-400 mb-2">👨‍💻 المهندس حيدر</h2><p class="text-slate-400 text-sm mb-4">مطور ومصمم النظام</p><div class="space-y-3 mt-4 text-right"><div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><i data-lucide="user" style="width:20px;height:20px;color:#60a5fa"></i><div class="flex-1"><p class="text-slate-400 text-xs">الاسم الكامل</p><p class="text-white font-bold text-lg">حيدر علي</p></div></div><div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3 group cursor-pointer" onclick='copyToClipboard("07813824203")'><i data-lucide="phone" style="width:20px;height:20px;color:#34d399"></i><div class="flex-1"><p class="text-slate-400 text-xs">رقم الهاتف <span class="text-emerald-400 text-xs mr-2">(اضغط للنسخ)</span></p><p class="text-white font-bold text-lg">07813824203</p></div></div></div><button onclick="this.closest('.fixed').remove()" class="mt-6 w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-2"><i data-lucide="x" style="width:18px;height:18px"></i> إغلاق</button></div></div>`;
+  document.body.appendChild(modal); lucide.createIcons(); modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
 function copyToClipboard(text) { navigator.clipboard.writeText(text).then(() => showToast(`✅ تم نسخ: ${text}`)).catch(() => showToast('❌ فشل النسخ')); }
 
 let autoRefreshInterval = null;
-function startAutoRefresh() { if (autoRefreshInterval) clearInterval(autoRefreshInterval); autoRefreshInterval = setInterval(() => { if (window.dataSdk && window.dataSdk.loadData) { console.log("🔔 تحديث تلقائي مخفي..."); window.dataSdk.loadData(); } }, 10000); }
+function startAutoRefresh() { if (autoRefreshInterval) clearInterval(autoRefreshInterval); autoRefreshInterval = setInterval(() => { if (window.dataSdk && window.dataSdk.loadData) window.dataSdk.loadData(); }, 10000); }
 startAutoRefresh();
 
 async function handleLogin(e) {
@@ -635,8 +455,7 @@ async function handleLogin(e) {
   await new Promise(resolve => setTimeout(resolve, 300));
   if (username === 'admin' && password === 'admin123') {
     currentUser = { type: 'admin', agent_name: 'المدير العام' }; isAgentMode = false;
-    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons(); showApp(); saveLoginState(); showToast('مرحباً في لوحة التحكم الإدارية'); 
-    // بعد تسجيل الدخول، نحاول حفظ FCM Token مرة أخرى
+    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons(); showApp(); saveLoginState(); showToast('مرحباً في لوحة التحكم الإدارية');
     const token = localStorage.getItem('fcm_token');
     if (token) await saveTokenToServer(token);
     return;
@@ -767,44 +586,14 @@ function renderCustomers() {
   el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
 }
 
-// ============== عرض المخزن (معدل مع أزرار المسح) ==============
 function renderInventory() {
   const products = {};
-  allOrders.forEach(o => { 
-    if (!products[o.product]) products[o.product] = { sold: 0, returned: 0, product_name: o.product }; 
-    if (o.status === 'واصل') products[o.product].sold += (o.quantity || 1); 
-    if (o.status === 'راجع') products[o.product].returned += (o.quantity || 1); 
-  });
-  inventoryData = products;
-  const container = document.getElementById('inventoryList');
-  const emptyDiv = document.getElementById('inventoryEmpty');
-  if (!container) return;
-  const names = Object.keys(products);
-  if (!names.length) { 
-    container.innerHTML = ''; 
-    if (emptyDiv) emptyDiv.classList.remove('hidden');
-    return; 
-  }
+  allOrders.forEach(o => { if (!products[o.product]) products[o.product] = { sold: 0, returned: 0, product_name: o.product }; if (o.status === 'واصل') products[o.product].sold += (o.quantity || 1); if (o.status === 'راجع') products[o.product].returned += (o.quantity || 1); });
+  const container = document.getElementById('inventoryList'); const emptyDiv = document.getElementById('inventoryEmpty');
+  if (!container) return; const names = Object.keys(products);
+  if (!names.length) { container.innerHTML = ''; if (emptyDiv) emptyDiv.classList.remove('hidden'); return; }
   if (emptyDiv) emptyDiv.classList.add('hidden');
-  container.innerHTML = names.map(name => {
-    const p = products[name];
-    const total = p.sold + p.returned;
-    return `<div class="inventory-item bg-slate-800/50 rounded-lg p-3 flex justify-between items-center hover:bg-slate-700/50 transition">
-      <div class="flex-1">
-        <p class="font-500 text-white">${escapeHtml(name)}</p>
-        <div class="flex gap-4 mt-1 text-xs">
-          <span class="text-emerald-400">📤 مباع: ${p.sold}</span>
-          <span class="text-red-400">📥 مرتجع: ${p.returned}</span>
-          <span class="text-slate-500">📦 الإجمالي: ${total}</span>
-        </div>
-      </div>
-      <div class="inventory-actions flex gap-2">
-        <button onclick="clearProduct('${escapeHtml(name).replace(/'/g, "\\'")}')" class="text-red-400 hover:text-red-300 transition p-1" title="مسح المنتج">
-          <i data-lucide="trash-2" style="width:18px;height:18px"></i>
-        </button>
-      </div>
-    </div>`;
-  }).join('');
+  container.innerHTML = names.map(name => { const p = products[name]; const total = p.sold + p.returned; return `<div class="inventory-item bg-slate-800/50 rounded-lg p-3 flex justify-between items-center hover:bg-slate-700/50 transition"><div class="flex-1"><p class="font-500 text-white">${escapeHtml(name)}</p><div class="flex gap-4 mt-1 text-xs"><span class="text-emerald-400">📤 مباع: ${p.sold}</span><span class="text-red-400">📥 مرتجع: ${p.returned}</span><span class="text-slate-500">📦 الإجمالي: ${total}</span></div></div><div class="inventory-actions flex gap-2"><button onclick="clearProduct('${escapeHtml(name).replace(/'/g, "\\'")}')" class="text-red-400 hover:text-red-300 transition p-1" title="مسح المنتج"><i data-lucide="trash-2" style="width:18px;height:18px"></i></button></div></div>`; }).join('');
   lucide.createIcons();
 }
 
@@ -814,13 +603,11 @@ function clearProduct(productName) {
     if (ordersToDelete.length === 0) { showToast('⚠️ لا توجد طلبات لهذا المنتج'); return; }
     let deletedCount = 0;
     ordersToDelete.forEach(async (order) => {
+      if (order.__backendId) await deleteFromJenni(order.__backendId);
       const result = await window.dataSdk.delete(order);
       if (result.isOk) deletedCount++;
     });
-    setTimeout(() => {
-      showToast(`✅ تم حذف ${deletedCount} طلب للمنتج ${productName}`);
-      setTimeout(() => window.dataSdk.loadData(), 500);
-    }, 500);
+    setTimeout(() => { showToast(`✅ تم حذف ${deletedCount} طلب`); setTimeout(() => window.dataSdk.loadData(), 500); }, 500);
   }
 }
 
@@ -828,10 +615,11 @@ async function clearAllInventory() {
   if (confirm('⚠️ تحذير: هذا الإجراء سيقوم بحذف جميع الطلبات والمنتجات من المخزن! هل أنت متأكد؟')) {
     let deletedCount = 0;
     for (const order of allOrders) {
+      if (order.__backendId) await deleteFromJenni(order.__backendId);
       const result = await window.dataSdk.delete(order);
       if (result.isOk) deletedCount++;
     }
-    showToast(`✅ تم حذف ${deletedCount} طلب والمخزن الآن فارغ`);
+    showToast(`✅ تم حذف ${deletedCount} طلب`);
     setTimeout(() => window.dataSdk.loadData(), 1000);
   }
 }
@@ -858,7 +646,6 @@ function exportCSV() { if (!allOrders.length) { showToast('لا توجد بيا�
 function showNewOrderModal() { document.getElementById('orderModal').classList.remove('hidden'); document.getElementById('orderForm').reset(); document.getElementById('f_qty').value = '1'; const today = new Date().toISOString().split('T')[0]; document.getElementById('f_date').value = today; createFlowersFromTop(); }
 function closeOrderModal() { document.getElementById('orderModal').classList.add('hidden'); }
 
-// تعديل دالة إضافة الطلب لجعل الربح ثابتاً حسب المندوب
 async function handleOrderSubmit(e) { 
   e.preventDefault(); 
   const btn = e.target.querySelector('button[type="submit"]'); 
@@ -867,27 +654,19 @@ async function handleOrderSubmit(e) {
   
   const qty = parseInt(document.getElementById('f_qty').value) || 1; 
   const price = parseFloat(document.getElementById('f_price').value) || 0; 
-  const total = qty * price; 
+  const total = qty * price;
+  const governorate = document.getElementById('f_governorate').value;
+  const district = document.getElementById('f_district').value;
+  const fullAddress = `${governorate} - ${district}`;
+  
   let agentName = 'مندوب';
+  if (isAgentMode && currentUser) agentName = (currentUser.agent_name || '').trim();
   
-  if (isAgentMode && currentUser) {
-    agentName = (currentUser.agent_name || '').trim();
-  }
-  
-  // الربح الثابت حسب المندوب (يتم جلبه من بيانات المندوب، افتراضي 1000 دينار)
   let profitPerOrder = DEFAULT_AGENT_PROFIT;
-  if (isAgentMode && currentUser && currentUser.agent_profit_per_order) {
-    profitPerOrder = currentUser.agent_profit_per_order;
-  } else if (!isAgentMode && agentName !== 'مندوب') {
-    const targetAgent = allAgents.find(a => a.agent_name === agentName);
-    if (targetAgent && targetAgent.agent_profit_per_order) {
-      profitPerOrder = targetAgent.agent_profit_per_order;
-    }
-  }
+  if (isAgentMode && currentUser && currentUser.agent_profit_per_order) profitPerOrder = currentUser.agent_profit_per_order;
+  else if (!isAgentMode && agentName !== 'مندوب') { const targetAgent = allAgents.find(a => a.agent_name === agentName); if (targetAgent && targetAgent.agent_profit_per_order) profitPerOrder = targetAgent.agent_profit_per_order; }
   
-  // الربح ثابت بغض النظر عن الكمية
   const profit = profitPerOrder;
-  
   const orderDate = document.getElementById('f_date').value || new Date().toISOString().split('T')[0];
   const note = document.getElementById('f_note').value.trim();
   const customerName = document.getElementById('f_name').value.trim();
@@ -896,7 +675,9 @@ async function handleOrderSubmit(e) {
     type: 'order', 
     customer_name: customerName, 
     customer_phone: document.getElementById('f_phone').value.trim(), 
-    customer_address: document.getElementById('f_address').value.trim(), 
+    customer_address: fullAddress,
+    governorate: governorate,
+    district: district,
     product: document.getElementById('f_product').value.trim(), 
     quantity: qty, 
     price: price, 
@@ -914,9 +695,7 @@ async function handleOrderSubmit(e) {
   
   if (result.isOk) { 
     closeOrderModal(); 
-    if (currentUser && (!isAgentMode || (isAgentMode && currentUser.type !== 'admin'))) {
-      addNotification('طلب جديد', `تم إضافة طلب جديد للزبون ${customerName} (الكمية: ${qty})`, 'order', result.data.__backendId);
-    }
+    if (currentUser && (!isAgentMode || (isAgentMode && currentUser.type !== 'admin'))) addNotification('طلب جديد', `تم إضافة طلب جديد للزبون ${customerName}`, 'order', result.data.__backendId);
     showToast('✅ تم حفظ الطلب'); 
   } else showToast('❌ حدث خطأ'); 
 }
@@ -975,34 +754,28 @@ function openDeleteConfirm(id, type) {
   document.getElementById('deleteConfirm').classList.remove('hidden'); 
 }
 function closeDeleteConfirm() { document.getElementById('deleteConfirm').classList.add('hidden'); pendingDeleteRecord = null; }
-async function confirmDelete() { if (!pendingDeleteRecord) return; const result = await window.dataSdk.delete(pendingDeleteRecord); closeDeleteConfirm(); showToast(result.isOk ? '✅ تم الحذف' : '❌ حدث خطأ'); }
+async function confirmDelete() { 
+  if (!pendingDeleteRecord) return; 
+  if (pendingDeleteRecord.__backendId && pendingDeleteRecord.type !== 'agent') await deleteFromJenni(pendingDeleteRecord.__backendId);
+  const result = await window.dataSdk.delete(pendingDeleteRecord); 
+  closeDeleteConfirm(); 
+  showToast(result.isOk ? '✅ تم الحذف' : '❌ حدث خطأ'); 
+}
 
 function openStatusModal(id) { 
-  if (isAgentMode) { 
-    showToast('🔒 غير مسموح للمندوبين'); 
-    return; 
-  } 
+  if (isAgentMode) { showToast('🔒 غير مسموح للمندوبين'); return; } 
   pendingStatusRecord = allOrders.find(o => o.__backendId === id); 
-  if (!pendingStatusRecord) { 
-    showToast('❌ حدث خطأ في تحميل الطلب'); 
-    return; 
-  } 
+  if (!pendingStatusRecord) { showToast('❌ حدث خطأ'); return; } 
   const statuses = ['جديد', 'قيد التوصيل', 'واصل', 'راجع']; 
   document.getElementById('statusOptions').innerHTML = statuses.map(s => `<button onclick="changeStatus('${s}')" class="w-full text-right px-4 py-2 rounded-lg hover:bg-slate-800 transition ${pendingStatusRecord.status === s ? 'bg-slate-800 text-amber-400' : ''}">${s}</button>`).join(''); 
   document.getElementById('statusModal').classList.remove('hidden'); 
 }
 function closeStatusModal() { document.getElementById('statusModal').classList.add('hidden'); pendingStatusRecord = null; }
 async function changeStatus(newStatus) { 
-  if (!pendingStatusRecord) { 
-    showToast('❌ حدث خطأ'); 
-    closeStatusModal(); 
-    return; 
-  } 
+  if (!pendingStatusRecord) { showToast('❌ حدث خطأ'); closeStatusModal(); return; } 
   const result = await window.dataSdk.update({ ...pendingStatusRecord, status: newStatus }); 
   closeStatusModal(); 
-  if (!isAgentMode && currentUser && pendingStatusRecord) {
-    addNotification('تغيير حالة', `تم تغيير حالة طلب ${pendingStatusRecord.customer_name} إلى ${newStatus}`, 'status', pendingStatusRecord.__backendId);
-  } 
+  if (!isAgentMode && currentUser && pendingStatusRecord) addNotification('تغيير حالة', `تم تغيير حالة طلب ${pendingStatusRecord.customer_name} إلى ${newStatus}`, 'status', pendingStatusRecord.__backendId);
   showToast(result.isOk ? `✅ تم التغيير إلى ${newStatus}` : '❌ حدث خطأ'); 
 }
 
@@ -1025,24 +798,6 @@ async function confirmEditProfit() {
   showToast(result.isOk ? '✅ تم تحديث الربح' : '❌ حدث خطأ'); 
 }
 
-function openAddNotesModal(id) { pendingNotesOrderId = id; document.getElementById('addNotesInput').value = ''; document.getElementById('addNotesModal').classList.remove('hidden'); }
-function closeAddNotesModal() { document.getElementById('addNotesModal').classList.add('hidden'); pendingNotesOrderId = null; }
-async function submitAddNotes() { 
-  if (!pendingNotesOrderId) return; 
-  const order = allOrders.find(o => o.__backendId === pendingNotesOrderId); 
-  if (!order) return; 
-  const notes = document.getElementById('addNotesInput').value.trim(); 
-  if (!notes) { closeAddNotesModal(); return; } 
-  const timestamp = new Date().toLocaleString('ar-IQ'); 
-  const newNotes = order.admin_notes ? `${order.admin_notes}\n[${timestamp}] ${currentUser?.agent_name}: ${notes}` : `[${timestamp}] ${currentUser?.agent_name}: ${notes}`; 
-  const result = await window.dataSdk.update({ ...order, admin_notes: newNotes }); 
-  if (result.isOk) { 
-    closeAddNotesModal(); 
-    if (!isAgentMode && currentUser) addNotification('ملاحظة جديدة', `تم إضافة ملاحظة لطلب ${order.customer_name}`, 'note', order.__backendId);
-    showToast('✅ تم إرسال الملاحظات'); 
-  } else showToast('❌ حدث خطأ'); 
-}
-
 function showToast(msg) { 
   const toast = document.getElementById('toast'); 
   document.getElementById('toastMsg').textContent = msg; 
@@ -1050,15 +805,14 @@ function showToast(msg) {
   setTimeout(() => toast.classList.add('hidden'), 2500); 
 }
 
-// ============== التحقق من حالة تسجيل الدخول السابقة عند تحميل الصفحة ==============
+// ============== التحقق من حالة تسجيل الدخول ==============
 if (loadLoginState()) {
-    console.log("🔄 استعادة جلسة سابقة للمستخدم:", currentUser?.agent_name || currentUser?.type);
+    console.log("🔄 استعادة جلسة سابقة");
     showApp();
-    // بعد استعادة الجلسة، نحاول حفظ FCM Token مرة أخرى
     const token = localStorage.getItem('fcm_token');
     if (token) saveTokenToServer(token);
 } else {
-    console.log("👋 لا توجد جلسة سابقة، يرجى تسجيل الدخول");
+    console.log("👋 لا توجد جلسة سابقة");
 }
 
 loadNotificationsFromStorage();
