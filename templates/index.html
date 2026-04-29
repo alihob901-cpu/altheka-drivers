@@ -352,7 +352,7 @@ function loadAreas(selectedArea) {
         <div class="flex items-center gap-2"><select id="filterStatus" onchange="renderOrders()" class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300"><option value="all">كل الحالات</option><option value="جديد">جديد</option><option value="قيد التوصيل">قيد التوصيل</option><option value="واصل">واصل</option><option value="راجع">راجع</option></select></div>
         <input id="searchOrders" oninput="renderOrders()" type="text" placeholder="بحث بالاسم أو الهاتف..." class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300 w-56">
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></table></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody>阅读</div></div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody>阅读</div></div>
     </div>
 
     <!-- Agents Page -->
@@ -728,7 +728,7 @@ function renderCustomers() {
   allOrders.forEach(o => { const key = o.customer_phone; if (!customers[key]) customers[key] = { name: o.customer_name, phone: o.customer_phone, address: o.customer_address, orders: 0, total: 0 }; customers[key].orders++; if (o.status === 'واصل') customers[key].total += (o.total || 0); });
   const el = document.getElementById('customersDetail'); if (!el) return; const keys = Object.keys(customers);
   if (!keys.length) { el.innerHTML = '<div class="text-center text-slate-600 p-8">👥 لا يوجد عملاء</div>'; return; }
-  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
+  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody>阅读<\/div>`;
 }
 
 function renderInventory() {
@@ -831,7 +831,7 @@ function showNewOrderModal() {
 }
 function closeOrderModal() { document.getElementById('orderModal').classList.add('hidden'); }
 
-// ============== دالة إضافة الطلب المعدلة (السعر ثابت وليس مضروب بالكمية) ==============
+// ============== دالة إضافة الطلب المعدلة (مع إضافة حقلي المحافظة والمنطقة) ==============
 async function handleOrderSubmit(e) { 
   e.preventDefault(); 
   const btn = e.target.querySelector('button[type="submit"]'); 
@@ -840,7 +840,6 @@ async function handleOrderSubmit(e) {
   
   const qty = parseInt(document.getElementById('f_qty').value) || 1; 
   const price = parseFloat(document.getElementById('f_price').value) || 0; 
-  // السعر الإجمالي = السعر المدخل (ثابت وليس مضروباً بالكمية)
   const total = price; 
   let agentName = 'مندوب';
   
@@ -863,22 +862,27 @@ async function handleOrderSubmit(e) {
   const note = document.getElementById('f_note').value.trim();
   const customerName = document.getElementById('f_name').value.trim();
   
-  // بناء العنوان الكامل مع المحافظة والمنطقة
+  // الحصول على المحافظة والمنطقة
   const governorateSelect = document.getElementById('governorateSelect');
   const areaSelect = document.getElementById('areaSelect');
   const governorateName = governorateSelect.options[governorateSelect.selectedIndex]?.text || '';
   const areaName = areaSelect.value || '';
   const addressDetail = document.getElementById('f_address').value.trim();
+  
+  // بناء العنوان الكامل
   let fullAddress = '';
   if (governorateName) fullAddress += governorateName;
   if (areaName) fullAddress += (fullAddress ? ' - ' : '') + areaName;
   if (addressDetail) fullAddress += (fullAddress ? ' - ' : '') + addressDetail;
   
+  // ✅ إرسال الطلب مع حقلي المحافظة والمنطقة بشكل منفصل
   const result = await window.dataSdk.create({ 
     type: 'order', 
     customer_name: customerName, 
     customer_phone: document.getElementById('f_phone').value.trim(), 
     customer_address: fullAddress,
+    governorate: governorateName,  // ✅ حقل المحافظة منفصل
+    area: areaName,                // ✅ حقل المنطقة منفصل
     product: document.getElementById('f_product').value.trim(), 
     quantity: qty, 
     price: price, 
