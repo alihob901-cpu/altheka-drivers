@@ -181,7 +181,6 @@ async function syncWithJenni() {
         
         if (result.success) {
             showToast('✅ تمت المزامنة بنجاح');
-            // إعادة تحميل البيانات
             if (window.dataSdk && window.dataSdk.loadData) {
                 setTimeout(() => window.dataSdk.loadData(), 500);
             }
@@ -294,7 +293,7 @@ async function syncWithJenni() {
         <div class="flex items-center gap-2"><select id="filterStatus" onchange="renderOrders()" class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300"><option value="all">كل الحالات</option><option value="جديد">جديد</option><option value="قيد التوصيل">قيد التوصيل</option><option value="واصل">واصل</option><option value="راجع">راجع</option></select></div>
         <input id="searchOrders" oninput="renderOrders()" type="text" placeholder="بحث بالاسم أو الهاتف..." class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300 w-56">
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody></table></div></div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th><tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody></table></div></div>
     </div>
 
     <!-- Agents Page -->
@@ -596,7 +595,9 @@ function renderOrders() {
     const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().split('T')[0] : ''); const displayDate = orderDate ? orderDate : 'غير محدد';
     const noteText = o.admin_notes || ''; const shortNote = noteText.length > 30 ? noteText.substring(0,30) + '...' : noteText;
     const address = o.customer_address || ''; const shortAddress = address.length > 25 ? address.substring(0,25) + '...' : address;
-    return `<tr class="hover:bg-slate-800/50 transition"><td class="px-4 py-3">${i+1}<\/td><td class="px-4 py-3 font-500">${escapeHtml(o.customer_name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(o.customer_phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(o.customer_phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(address)}")' title="انقر لنسخ العنوان">📍 ${shortAddress || '-'}<\/span><\/td><td class="px-4 py-3">${escapeHtml(o.product)} ×${o.quantity}<\/td><td class="px-4 py-3 font-700">${(o.total||0).toLocaleString('ar-IQ')}<\/td><td class="px-4 py-3 font-700 text-amber-400">${(o.profit||0).toLocaleString('ar-IQ')} د.ع<\/td><td class="px-4 py-3 font-500 text-blue-400">${escapeHtml(o.agent_name || 'مندوب')}<\/td><td class="px-4 py-3 font-500 text-slate-300"><span class="cursor-pointer hover:text-amber-400 transition" onclick='editOrderDate("${o.__backendId}")' title="انقر لتعديل التاريخ">📅 ${displayDate}<\/span><\/td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}" ${!isAgentMode ? `style="cursor:pointer" onclick='openStatusModal("${o.__backendId}")'` : ''}>${o.status}<\/span><\/td><td class="px-4 py-3 text-slate-400 max-w-[200px]"><span class="clickable-note" onclick='showFullNote("${escapeHtml(noteText).replace(/"/g, '&quot;')}", "${escapeHtml(o.customer_name)}")' title="انقر لعرض الملاحظة كاملة">${shortNote || '-'}<\/span><\/td><td class="px-4 py-3 flex gap-3">${actionsHtml}<\/td><\/tr>`;
+    // عرض المنتج مع الكمية والمواد إذا وجدت
+    const productDisplay = o.product_info ? `${escapeHtml(o.product_info)}` : `${escapeHtml(o.product)} ×${o.quantity}`;
+    return `<tr class="hover:bg-slate-800/50 transition"><td class="px-4 py-3">${i+1}<\/td><td class="px-4 py-3 font-500">${escapeHtml(o.customer_name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(o.customer_phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(o.customer_phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(address)}")' title="انقر لنسخ العنوان">📍 ${shortAddress || '-'}<\/span><\/td><td class="px-4 py-3">${productDisplay}<\/td><td class="px-4 py-3 font-700">${(o.total||0).toLocaleString('ar-IQ')}<\/td><td class="px-4 py-3 font-700 text-amber-400">${(o.profit||0).toLocaleString('ar-IQ')} د.ع<\/td><td class="px-4 py-3 font-500 text-blue-400">${escapeHtml(o.agent_name || 'مندوب')}<\/td><td class="px-4 py-3 font-500 text-slate-300"><span class="cursor-pointer hover:text-amber-400 transition" onclick='editOrderDate("${o.__backendId}")' title="انقر لتعديل التاريخ">📅 ${displayDate}<\/span><\/td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}" ${!isAgentMode ? `style="cursor:pointer" onclick='openStatusModal("${o.__backendId}")'` : ''}>${o.status}<\/span><\/td><td class="px-4 py-3 text-slate-400 max-w-[200px]"><span class="clickable-note" onclick='showFullNote("${escapeHtml(noteText).replace(/"/g, '&quot;')}", "${escapeHtml(o.customer_name)}")' title="انقر لعرض الملاحظة كاملة">${shortNote || '-'}<\/span><\/td><td class="px-4 py-3 flex gap-3">${actionsHtml}<\/td><\/tr>`;
   }).join('');
   lucide.createIcons();
 }
@@ -699,7 +700,7 @@ function renderReports() {
   const agentsEl = document.getElementById('reportAgents');
   if (agentsEl) agentsEl.innerHTML = Object.keys(agents).length ? Object.entries(agents).map(([name, a]) => `<div class="flex justify-between py-2 border-b border-slate-800"><span class="font-500">${escapeHtml(name)}</span><span class="text-emerald-400">${a.sales.toLocaleString('ar-IQ')} د.ع</span></div>`).join('') : '<p class="text-center text-slate-500 py-4">لا توجد بيانات</p>';
 }
-function exportCSV() { if (!allOrders.length) { showToast('لا توجد بيانات'); return; } const headers = ['الزبون','الهاتف','العنوان','المنتج','الكمية','السعر','الإجمالي','المندوب','التاريخ','الحالة','الملاحظات']; const rows = allOrders.map(o => [o.customer_name, o.customer_phone, o.customer_address, o.product, o.quantity, o.price, o.total, o.agent_name, o.order_date || '', o.status, o.admin_notes || '']); const csv = '\uFEFF' + [headers, ...rows].map(r => r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'orders.csv'; a.click(); showToast('📥 تم التصدير'); }
+function exportCSV() { if (!allOrders.length) { showToast('لا توجد بيانات'); return; } const headers = ['الزبون','الهاتف','العنوان','المنتج','الكمية','السعر','الإجمالي','المندوب','التاريخ','الحالة','الملاحظات']; const rows = allOrders.map(o => [o.customer_name, o.customer_phone, o.customer_address, o.product_info || o.product, o.quantity, o.price, o.total, o.agent_name, o.order_date || '', o.status, o.admin_notes || '']); const csv = '\uFEFF' + [headers, ...rows].map(r => r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'orders.csv'; a.click(); showToast('📥 تم التصدير'); }
 
 function showNewOrderModal() { 
     document.getElementById('orderModal').classList.remove('hidden'); 
@@ -720,10 +721,14 @@ async function handleOrderSubmit(e) {
   
   const qty = parseInt(document.getElementById('f_qty').value) || 1; 
   const price = parseFloat(document.getElementById('f_price').value) || 0; 
-  const total = qty * price;
+  // ✅ السعر ثابت لا يضرب في الكمية
+  const total = price;
   const governorate = document.getElementById('f_governorate').value;
   const district = document.getElementById('f_district').value;
   const fullAddress = `${governorate} - ${district}`;
+  const productName = document.getElementById('f_product').value.trim();
+  // ✅ إنشاء حقل المواد مع الكمية
+  const productInfo = qty > 1 ? `${productName} ×${qty}` : productName;
   
   let agentName = 'مندوب';
   if (isAgentMode && currentUser) agentName = (currentUser.agent_name || '').trim();
@@ -744,7 +749,8 @@ async function handleOrderSubmit(e) {
     customer_address: fullAddress,
     governorate: governorate,
     district: district,
-    product: document.getElementById('f_product').value.trim(), 
+    product: productName,
+    product_info: productInfo,
     quantity: qty, 
     price: price, 
     total: total, 
