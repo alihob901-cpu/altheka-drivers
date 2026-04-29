@@ -161,6 +161,12 @@ def create_shipment_in_jenni(order_data):
         phone = "07717798622"
         print(f"⚠️ تم تصحيح رقم الهاتف إلى: {phone}")
     
+    # ✅ الحصول على المواد (product_info) أو المنتج العادي مع الكمية
+    product_info = order_data.get("product_info", "") or order_data.get("product", "")
+    quantity = int(order_data.get("quantity", 1))
+    if quantity > 1 and not order_data.get("product_info"):
+        product_info = f"{order_data.get('product', '')} ×{quantity}"
+    
     shipment_payload = {
         "system_code": JENNI_SYSTEM_CODE,
         "shipments": [{
@@ -174,9 +180,10 @@ def create_shipment_in_jenni(order_data):
             "address": order_data.get("customer_address", "عنوان غير محدد")[:100],
             "amount_iqd": float(order_data.get("total", 0)),
             "amount_collect_iqd": float(order_data.get("total", 0)),
-            "quantity": int(order_data.get("quantity", 1)),
+            "quantity": quantity,
             "weight": 0.5,
             "content_type": "parcel",
+            "product_info": product_info[:200],  # ✅ إضافة المواد
             "note": order_data.get("admin_notes", "")[:200],
             "is_fragile": False,
             "is_express": False
@@ -480,6 +487,7 @@ def add_data():
         
         print(f"📝 إضافة إلى جدول {table_name}: {new_item.get('customer_name', new_item.get('agent_name', 'غير معروف'))}")
         
+        # إزالة الحقول التي قد تسبب مشكلة (مع الاحتفاظ بـ product_info للإرسال إلى الزعيم)
         insert_item = {k: v for k, v in new_item.items() if k not in ['governorate', 'district', 'governorate_code', 'jenni_last_update']}
         
         result = supabase.table(table_name).insert(insert_item).execute()
