@@ -7,7 +7,7 @@ boto3
 python-dotenv
 flask-cors
 firebase-admin
-
+apscheduler==3.11.2
 
 
 
