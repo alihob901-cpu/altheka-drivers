@@ -147,24 +147,38 @@ def create_shipment_in_jenni(order_data):
     governorate_name = order_data.get("governorate", "بغداد")
     governorate_code = get_governorate_code(governorate_name)
     
+    # تنظيف رقم الهاتف
+    phone = order_data.get("customer_phone", "")
+    phone = ''.join(filter(str.isdigit, phone))  # استخراج الأرقام فقط
+    if not phone.startswith('07') or len(phone) != 11:
+        phone = "07717798622"  # رقم افتراضي صحيح
+        print(f"⚠️ تم تصحيح رقم الهاتف إلى: {phone}")
+    
     # تحويل بيانات الطلب إلى صيغة الزعيم
     shipment_payload = {
         "system_code": JENNI_SYSTEM_CODE,
         "shipments": [{
-            "shipment_number": order_data.get("__backendId", ""),
-            "external_shipment_id": order_data.get("__backendId", ""),
-            "receiver_name": order_data.get("customer_name", "")[:50],
-            "receiver_phone_1": order_data.get("customer_phone", ""),
+            "shipment_number": str(order_data.get("__backendId", "")),
+            "external_shipment_id": str(order_data.get("__backendId", "")),
+            "receiver_name": order_data.get("customer_name", "زبون")[:50],
+            "receiver_phone_1": phone,
+            "receiver_phone_2": "",
             "governorate_code": governorate_code,
             "city": governorate_name,
-            "address": order_data.get("customer_address", "")[:100],
+            "address": order_data.get("customer_address", "عنوان غير محدد")[:100],
             "amount_iqd": float(order_data.get("total", 0)),
-            "quantity": order_data.get("quantity", 1),
-            "note": order_data.get("admin_notes", "")[:200]
+            "amount_collect_iqd": float(order_data.get("total", 0)),  # نفس المبلغ للتحصيل
+            "quantity": int(order_data.get("quantity", 1)),
+            "weight": 0.5,
+            "content_type": "parcel",
+            "note": order_data.get("admin_notes", "")[:200],
+            "is_fragile": False,
+            "is_express": False
         }]
     }
     
     print(f"📍 المحافظة المرسلة: {governorate_name} -> {governorate_code}")
+    print(f"📦 الحمولة المرسلة: {json.dumps(shipment_payload, ensure_ascii=False)}")
     
     try:
         response = requests.post(
@@ -172,12 +186,13 @@ def create_shipment_in_jenni(order_data):
             json=shipment_payload,
             headers={
                 "Content-Type": "application/json",
-                "Authorization": token
+                "Authorization": f"Bearer {token}"
             },
             timeout=30
         )
         
         print(f"📡 رد الزعيم: {response.status_code}")
+        print(f"📄 نص الرد: {response.text}")
         
         if response.status_code == 200 or response.status_code == 201:
             result = response.json()
@@ -190,8 +205,10 @@ def create_shipment_in_jenni(order_data):
                     "message": "تم إرسال الطلب إلى نظام الزعيم بنجاح"
                 }
             else:
-                print(f"⚠️ لم يتم قبول الطلب")
-                return {"success": False, "error": "الطلب مرفوض من نظام الزعيم", "skip": True}
+                rejected = result.get("rejected_shipments", [])
+                reason = rejected[0].get("reason", "سبب غير معروف") if rejected else "الطلب مرفوض"
+                print(f"⚠️ سبب الرفض: {reason}")
+                return {"success": False, "error": f"مرفوض: {reason}", "skip": True}
         else:
             print(f"❌ فشل الإرسال: {response.status_code}")
             return {"success": False, "error": f"فشل الإرسال: {response.status_code}", "skip": True}
@@ -214,7 +231,7 @@ def delete_shipment_from_jenni(shipment_number):
             f"{JENNI_API_URL}/v2/shipments/{shipment_number}",
             headers={
                 "Content-Type": "application/json",
-                "Authorization": token
+                "Authorization": f"Bearer {token}"
             },
             timeout=30
         )
@@ -346,6 +363,12 @@ def add_data():
         new_item['created_at'] = datetime.now().isoformat()
         new_item['updated_at'] = datetime.now().isoformat()
         
+        # إزالة الحقول التي قد لا تكون موجودة في قاعدة البيانات
+        if 'governorate' in new_item and 'governorate' not in new_item:
+            pass  # سيتم تجاهلها إذا لم تكن موجودة في الجدول
+        if 'district' in new_item and 'district' not in new_item:
+            pass
+        
         if new_item.get('type') == 'agent':
             table_name = 'agents'
         else:
@@ -354,7 +377,10 @@ def add_data():
         
         print(f"📝 إضافة إلى جدول {table_name}: {new_item.get('customer_name', new_item.get('agent_name', 'غير معروف'))}")
         
-        result = supabase.table(table_name).insert(new_item).execute()
+        # إزالة الحقول التي قد تسبب مشكلة
+        insert_item = {k: v for k, v in new_item.items() if k not in ['governorate', 'district']}
+        
+        result = supabase.table(table_name).insert(insert_item).execute()
         
         if result.data:
             returned_data = result.data[0]
