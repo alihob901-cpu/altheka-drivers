@@ -208,7 +208,7 @@ def create_shipment_in_jenni(order_data):
 
 # ============== دالة حذف الطلب من نظام الزعيم ==============
 def delete_shipment_from_jenni(shipment_number):
-    """حذف شحنة من نظام الزعيم ومن قاعدة البيانات المحلية"""
+    """حذف شحنة من نظام الزعيم"""
     print(f"🗑️ محاولة حذف الطلب {shipment_number} من نظام الزعيم...")
     
     token = jenni_get_token()
@@ -217,10 +217,9 @@ def delete_shipment_from_jenni(shipment_number):
         return {"success": False, "error": "فشل المصادقة مع نظام الزعيم"}
     
     try:
-        # أولاً: البحث عن shipment_id من خلال shipment_number
-        query_response = requests.post(
-            f"{JENNI_API_URL}/v2/shipments/query",
-            json={"shipment_numbers": [shipment_number]},
+        # محاولة حذف مباشر باستخدام رقم الشحنة
+        delete_response = requests.delete(
+            f"{JENNI_API_URL}/v2/shipments/{shipment_number}",
             headers={
                 "Content-Type": "application/json",
                 "Authorization": token
@@ -228,41 +227,19 @@ def delete_shipment_from_jenni(shipment_number):
             timeout=30
         )
         
-        print(f"📡 رد الاستعلام: {query_response.status_code}")
+        print(f"📡 رد الحذف المباشر: {delete_response.status_code}")
         
-        if query_response.status_code == 200:
-            query_result = query_response.json()
-            if query_result.get("shipments") and len(query_result["shipments"]) > 0:
-                shipment_id = query_result["shipments"][0].get("shipment_id")
-                if shipment_id:
-                    # حذف الشحنة باستخدام shipment_id
-                    delete_response = requests.delete(
-                        f"{JENNI_API_URL}/v2/orders/{shipment_id}",
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": token
-                        },
-                        timeout=30
-                    )
-                    
-                    print(f"📡 رد الحذف: {delete_response.status_code}")
-                    
-                    if delete_response.status_code == 200:
-                        print(f"✅ تم حذف الطلب {shipment_number} من نظام الزعيم بنجاح")
-                        # ✅ إضافة: حذف الطلب من Supabase أيضاً
-                        if supabase:
-                            supabase.table('orders').delete().eq('__backendId', shipment_number).execute()
-                            print(f"✅ تم حذف الطلب {shipment_number} من قاعدة البيانات أيضاً")
-                        return {"success": True, "message": "تم حذف الطلب من نظام الزعيم وقاعدة البيانات"}
-                    else:
-                        print(f"⚠️ فشل حذف الطلب: {delete_response.status_code}")
-                        return {"success": False, "error": f"فشل الحذف: {delete_response.status_code}"}
-                else:
-                    return {"success": False, "error": "لم يتم العثور على shipment_id"}
-            else:
-                return {"success": False, "error": "لم يتم العثور على الطلب في نظام الزعيم"}
+        if delete_response.status_code == 200:
+            print(f"✅ تم حذف الطلب {shipment_number} من نظام الزعيم بنجاح")
+            return {"success": True, "message": "تم حذف الطلب من نظام الزعيم"}
+        elif delete_response.status_code == 404:
+            # إذا لم يتم العثور على الطلب، قد يكون محذوفاً بالفعل
+            print(f"⚠️ الطلب {shipment_number} غير موجود في نظام الزعيم (ربما محذوف مسبقاً)")
+            return {"success": True, "message": "الطلب غير موجود في نظام الزعيم"}
         else:
-            return {"success": False, "error": f"فشل الاستعلام: {query_response.status_code}"}
+            print(f"⚠️ فشل حذف الطلب: {delete_response.status_code} - {delete_response.text[:200]}")
+            return {"success": False, "error": f"فشل الحذف: {delete_response.status_code}"}
+            
     except Exception as e:
         print(f"❌ خطأ في حذف الزعيم: {e}")
         return {"success": False, "error": str(e)}
@@ -395,13 +372,7 @@ def add_data():
             if 'type' not in returned_data:
                 returned_data['type'] = table_name[:-1] if table_name != 'orders' else 'order'
             
-            # ============== DEBUG ==============
-            print(f"🔍 DEBUG: table_name={table_name}")
-            print(f"🔍 DEBUG: status={new_item.get('status')}")
-            print(f"🔍 DEBUG: will send to Jenni? {table_name == 'orders' and new_item.get('status') == 'جديد'}")
-            # ===================================
-            
-            # ============== إرسال الطلب إلى نظام الزعيم ==============
+            # إرسال الطلب إلى نظام الزعيم
             if table_name == 'orders' and new_item.get('status') == 'جديد':
                 print("🚀 بدء إرسال الطلب إلى نظام الزعيم...")
                 jenni_result = create_shipment_in_jenni(new_item)
@@ -415,8 +386,6 @@ def add_data():
                         }).eq('__backendId', new_item['__backendId']).execute()
                 else:
                     print(f"⚠️ فشل إرسال الطلب إلى الزعيم: {jenni_result.get('error')}")
-            else:
-                print("⏭️ تخطي إرسال إلى الزعيم (ليس طلب order أو الحالة ليست جديد)")
             
             return jsonify({'isOk': True, 'data': returned_data}), 201
         return jsonify({'isOk': False, 'error': 'Failed to save'}), 500
@@ -475,17 +444,16 @@ def delete_data(item_id):
         if not supabase:
             return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
         
-        # جلب الطلب قبل الحذف للحصول على jenni_shipment_id
-        order_result = supabase.table('orders').select('jenni_shipment_id').eq('__backendId', item_id).execute()
-        jenni_shipment_id = order_result.data[0].get('jenni_shipment_id') if order_result.data else None
+        # جلب الطلب قبل الحذف
+        order_result = supabase.table('orders').select('*').eq('__backendId', item_id).execute()
         
-        # حذف من نظام الزعيم أولاً إذا كان موجوداً
-        if jenni_shipment_id and jenni_shipment_id != 'null':
-            print(f"🗑️ حذف الطلب من نظام الزعيم: {jenni_shipment_id}")
-            delete_result = delete_shipment_from_jenni(jenni_shipment_id)
+        if order_result.data:
+            order = order_result.data[0]
+            # حذف من نظام الزعيم باستخدام رقم الطلب
+            print(f"🗑️ حذف الطلب {item_id} من نظام الزعيم...")
+            delete_result = delete_shipment_from_jenni(item_id)
             if delete_result.get("success"):
-                print("✅ تم حذف الطلب من نظام الزعيم بنجاح")
-                add_notification_to_db('حذف من الزعيم', f'تم حذف الطلب رقم {jenni_shipment_id} من نظام الزعيم', 'status')
+                print("✅ تم حذف الطلب من نظام الزعيم")
             else:
                 print(f"⚠️ فشل حذف الطلب من الزعيم: {delete_result.get('error')}")
         
