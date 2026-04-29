@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 import json
 import requests
 from functools import wraps
+from apscheduler.schedulers.background import BackgroundScheduler
+import time
 
 # تحميل المتغيرات البيئية
 load_dotenv()
@@ -74,7 +76,7 @@ def get_governorate_code(governorate_name):
         'النجف': 'NJF',
         'كركوك': 'KRK',
         'الأنبار': 'ANB',
-        'كربلاء': 'KRB',      # ✅ تم التصحيح من KAR إلى KRB
+        'كربلاء': 'KRB',
         'ذي قار': 'DHI',
         'ميسان': 'MYS',
         'بابل': 'BBL',
@@ -132,12 +134,10 @@ def jenni_get_token():
     import time
     global jenni_jwt_token, jenni_token_expiry
     
-    # إذا كان التوكن موجوداً ولم ينتهِ صلاحيته
     if jenni_jwt_token and jenni_token_expiry and time.time() < jenni_token_expiry - 60:
         print(f"✅ التوكن صالح حتى: {datetime.fromtimestamp(jenni_token_expiry).strftime('%H:%M:%S')}")
         return jenni_jwt_token
     
-    # وإلا سجل دخول جديد
     print("⚠️ التوكن منتهي أو غير موجود، إعادة تسجيل الدخول...")
     if jenni_login():
         return jenni_jwt_token
@@ -152,18 +152,15 @@ def create_shipment_in_jenni(order_data):
         print("❌ فشل الحصول على التوكن")
         return {"success": False, "error": "فشل المصادقة مع نظام الزعيم", "skip": True}
     
-    # استخراج المحافظة
     governorate_name = order_data.get("governorate", "بغداد")
     governorate_code = get_governorate_code(governorate_name)
     
-    # تنظيف رقم الهاتف
     phone = order_data.get("customer_phone", "")
-    phone = ''.join(filter(str.isdigit, phone))  # استخراج الأرقام فقط
+    phone = ''.join(filter(str.isdigit, phone))
     if not phone.startswith('07') or len(phone) != 11:
-        phone = "07717798622"  # رقم افتراضي صحيح
+        phone = "07717798622"
         print(f"⚠️ تم تصحيح رقم الهاتف إلى: {phone}")
     
-    # تحويل بيانات الطلب إلى صيغة الزعيم
     shipment_payload = {
         "system_code": JENNI_SYSTEM_CODE,
         "shipments": [{
@@ -189,7 +186,6 @@ def create_shipment_in_jenni(order_data):
     print(f"📍 المحافظة المرسلة: {governorate_name} -> {governorate_code}")
     print(f"📦 الحمولة المرسلة: {json.dumps(shipment_payload, ensure_ascii=False)}")
     
-    # تجربة طريقتين للمصادقة
     auth_methods = [token, f"Bearer {token}"]
     
     for auth_method in auth_methods:
@@ -245,7 +241,6 @@ def delete_shipment_from_jenni(shipment_number):
         print("❌ فشل الحصول على التوكن")
         return {"success": False, "error": "فشل المصادقة مع نظام الزعيم"}
     
-    # تجربة طريقتين للمصادقة
     auth_methods = [token, f"Bearer {token}"]
     
     for auth_method in auth_methods:
@@ -277,6 +272,92 @@ def delete_shipment_from_jenni(shipment_number):
             continue
     
     return {"success": False, "error": "فشل جميع محاولات المصادقة"}
+
+# ============== مزامنة الحذف مع نظام الزعيم (Polling) ==============
+def sync_deleted_shipments():
+    """مزامنة الطلبات المحذوفة من نظام الزعيم (تحديد الطلبات التي تم حذفها من الزعيم وحذفها محلياً)"""
+    print("🔄 [مزامنة] بدء مزامنة الحذف مع نظام الزعيم...")
+    
+    if not supabase:
+        print("❌ Supabase غير متصل")
+        return
+    
+    try:
+        # جلب جميع الطلبات من قاعدة البيانات المحلية
+        local_orders = supabase.table('orders').select('__backendId, jenni_shipment_id, customer_name').execute()
+        
+        if not local_orders.data:
+            print("📭 لا توجد طلبات للمزامنة")
+            return
+        
+        token = jenni_get_token()
+        if not token:
+            print("❌ فشل الحصول على التوكن")
+            return
+        
+        deleted_count = 0
+        checked_count = 0
+        
+        for order in local_orders.data:
+            shipment_id = order.get('jenni_shipment_id')
+            if not shipment_id:
+                continue
+                
+            try:
+                # الاستعلام عن الطلب في نظام الزعيم
+                response = requests.post(
+                    f"{JENNI_API_URL}/v2/shipments/query",
+                    json={"shipment_ids": [int(shipment_id)]},
+                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+                    timeout=30
+                )
+                
+                checked_count += 1
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    # إذا لم يتم العثور على الطلب في الزعيم، احذفه محلياً
+                    if not result.get('shipments') or len(result['shipments']) == 0:
+                        print(f"🗑️ [مزامنة] الطلب {order['__backendId']} (الزبون: {order.get('customer_name', 'غير معروف')}) غير موجود في الزعيم، يتم حذفه محلياً")
+                        supabase.table('orders').delete().eq('__backendId', order['__backendId']).execute()
+                        deleted_count += 1
+                elif response.status_code == 401:
+                    # توكن منتهي، حاول تسجيل الدخول مرة أخرى
+                    print("⚠️ توكن منتهي، محاولة إعادة التسجيل...")
+                    token = jenni_login()
+                    if token:
+                        continue
+                else:
+                    print(f"⚠️ فشل الاستعلام للطلب {order['__backendId']}: {response.status_code}")
+                    
+            except Exception as e:
+                print(f"❌ خطأ في الاستعلام للطلب {order['__backendId']}: {e}")
+                continue
+        
+        print(f"✅ [مزامنة] اكتملت المزامنة: تم فحص {checked_count} طلب، تم حذف {deleted_count} طلب محلياً")
+        
+        # إضافة إشعار في قاعدة البيانات
+        if deleted_count > 0:
+            add_notification_to_db(
+                'مزامنة مع الزعيم',
+                f'تم حذف {deleted_count} طلب تلقائياً (لم يتم العثور عليها في نظام الزعيم)',
+                'status'
+            )
+        
+    except Exception as e:
+        print(f"❌ خطأ في مزامنة الحذف: {e}")
+
+# ============== API للمزامنة اليدوية ==============
+@app.route('/api/sync-with-jenni', methods=['POST'])
+def sync_with_jenni():
+    """مزامنة يدوية مع نظام الزعيم - حذف الطلبات التي تم حذفها من الزعيم"""
+    try:
+        print("🔄 بدء مزامنة يدوية مع نظام الزعيم...")
+        sync_deleted_shipments()
+        return jsonify({"success": True, "message": "تمت المزامنة بنجاح"})
+    except Exception as e:
+        print(f"❌ خطأ في المزامنة اليدوية: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # ============== دوال الإشعارات ==============
 def send_fcm_notification_via_admin(fcm_token, title, body, data=None):
@@ -399,7 +480,6 @@ def add_data():
         
         print(f"📝 إضافة إلى جدول {table_name}: {new_item.get('customer_name', new_item.get('agent_name', 'غير معروف'))}")
         
-        # إزالة الحقول التي قد لا تكون موجودة في قاعدة البيانات
         insert_item = {k: v for k, v in new_item.items() if k not in ['governorate', 'district', 'governorate_code', 'jenni_last_update']}
         
         result = supabase.table(table_name).insert(insert_item).execute()
@@ -409,7 +489,6 @@ def add_data():
             if 'type' not in returned_data:
                 returned_data['type'] = table_name[:-1] if table_name != 'orders' else 'order'
             
-            # إرسال الطلب إلى نظام الزعيم (مع تجاهل الأخطاء)
             if table_name == 'orders' and new_item.get('status') == 'جديد':
                 print("🚀 بدء إرسال الطلب إلى نظام الزعيم...")
                 try:
@@ -483,12 +562,10 @@ def delete_data(item_id):
         if not supabase:
             return jsonify({"isOk": False, "error": "Supabase not connected"}), 500
         
-        # جلب الطلب قبل الحذف
         order_result = supabase.table('orders').select('*').eq('__backendId', item_id).execute()
         
         if order_result.data:
             order = order_result.data[0]
-            # حذف من نظام الزعيم
             print(f"🗑️ حذف الطلب {item_id} من نظام الزعيم...")
             delete_result = delete_shipment_from_jenni(item_id)
             if delete_result.get("success"):
@@ -496,7 +573,6 @@ def delete_data(item_id):
             else:
                 print(f"⚠️ فشل حذف الطلب من الزعيم: {delete_result.get('error')}")
         
-        # حذف من Supabase
         result = supabase.table('orders').delete().eq('__backendId', item_id).execute()
         if result.data:
             return jsonify({'isOk': True})
@@ -716,6 +792,15 @@ def health_check():
         "timestamp": datetime.now().isoformat()
     }), 200
 
+# ============== تشغيل المهام المجدولة ==============
+def start_scheduler():
+    """تشغيل المجدول للمهام الخلفية"""
+    scheduler = BackgroundScheduler()
+    # تشغيل مزامنة الحذف كل ساعة
+    scheduler.add_job(func=sync_deleted_shipments, trigger="interval", hours=1, id='sync_deleted_job')
+    scheduler.start()
+    print("✅ تم تشغيل المجدول - سيتم مزامنة الحذف مع الزعيم كل ساعة")
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print("=" * 50)
@@ -725,5 +810,8 @@ if __name__ == '__main__':
     print("=" * 50)
     
     jenni_login()
+    
+    # تشغيل المجدول
+    start_scheduler()
     
     app.run(debug=False, host='0.0.0.0', port=port)

@@ -162,6 +162,37 @@ async function loadGovernorates() {
             FALLBACK_GOVERNORATES.map(g => `<option value="${g}">${g}</option>`).join('');
     }
 }
+
+// ============== دالة المزامنة اليدوية مع الزعيم ==============
+async function syncWithJenni() {
+    if (!confirm('⚠️ هل أنت متأكد من المزامنة مع نظام الزعيم؟\n\nسيتم حذف أي طلبات غير موجودة في نظام الزعيم من قاعدة البيانات المحلية.')) {
+        return;
+    }
+    
+    showToast('🔄 جاري المزامنة مع نظام الزعيم...');
+    
+    try {
+        const response = await fetch('/api/sync-with-jenni', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('✅ تمت المزامنة بنجاح');
+            // إعادة تحميل البيانات
+            if (window.dataSdk && window.dataSdk.loadData) {
+                setTimeout(() => window.dataSdk.loadData(), 500);
+            }
+        } else {
+            showToast('❌ فشل المزامنة: ' + (result.error || 'خطأ غير معروف'));
+        }
+    } catch (error) {
+        console.error('❌ خطأ في المزامنة:', error);
+        showToast('❌ حدث خطأ أثناء المزامنة');
+    }
+}
 </script>
 
 <!-- Login Page -->
@@ -223,6 +254,9 @@ async function loadGovernorates() {
           </button>
         </div>
         <button id="addOrderBtn" onclick="showNewOrderModal()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition hidden"> <i data-lucide="plus" style="width:16px;height:16px"></i> طلب جديد </button>
+        <button id="syncWithJenniBtn" onclick="syncWithJenni()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition">
+          <i data-lucide="refresh-cw" style="width:16px;height:16px"></i> مزامنة مع الزعيم
+        </button>
         <button onclick="logout()" class="text-slate-400 hover:text-red-400 p-2 rounded-lg hover:bg-slate-800 transition"> <i data-lucide="log-out" style="width:20px;height:20px"></i> </button>
       </div>
     </header>
@@ -673,7 +707,7 @@ function showNewOrderModal() {
     document.getElementById('f_qty').value = '1'; 
     const today = new Date().toISOString().split('T')[0]; 
     document.getElementById('f_date').value = today; 
-    loadGovernorates(); // تحميل المحافظات عند فتح النموذج
+    loadGovernorates();
     createFlowersFromTop(); 
 }
 function closeOrderModal() { document.getElementById('orderModal').classList.add('hidden'); }
