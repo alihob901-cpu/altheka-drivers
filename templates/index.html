@@ -15,7 +15,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"></script>
   
   <style>
-    /* جميع الأنماط السابقة كما هي */
     html, body { height: 100%; margin: 0; }
     * { font-family: 'Tajawal', sans-serif; }
     .sidebar-item { transition: all 0.2s; }
@@ -40,9 +39,7 @@
       from { opacity: 0; transform: translateY(20px); }
       to { opacity: 1; transform: translateY(0); }
     }
-    .animate-fade-in-up {
-      animation: fadeInUp 0.3s ease-out;
-    }
+    .animate-fade-in-up { animation: fadeInUp 0.3s ease-out; }
     .flower-top {
       position: fixed;
       pointer-events: none;
@@ -65,44 +62,19 @@
       0% { opacity: 1; transform: translateY(calc(100vh + 50px)) rotate(0deg); }
       100% { opacity: 0; transform: translateY(-100px) rotate(360deg); }
     }
-    .note-full {
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-width: 300px;
-    }
-    .clickable-note {
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .clickable-note:hover {
-      color: #60a5fa;
-      text-decoration: underline;
-    }
-    .copyable {
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .copyable:hover {
-      color: #34d399;
-      text-decoration: underline;
-    }
+    .note-full { white-space: pre-wrap; word-break: break-word; max-width: 300px; }
+    .clickable-note { cursor: pointer; transition: all 0.2s; }
+    .clickable-note:hover { color: #60a5fa; text-decoration: underline; }
+    .copyable { cursor: pointer; transition: all 0.2s; }
+    .copyable:hover { color: #34d399; text-decoration: underline; }
     @keyframes pulse-ring {
       0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
       70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
       100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
     }
-    .notification-badge {
-      animation: pulse-ring 1.5s infinite;
-    }
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateX(50px); }
-      to { opacity: 1; transform: translateX(0); }
-    }
-    .notification-item {
-      animation: slideIn 0.3s ease-out;
-    }
-    
-    /* واجهة الإشعارات للهواتف */
+    .notification-badge { animation: pulse-ring 1.5s infinite; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(50px); } to { opacity: 1; transform: translateX(0); } }
+    .notification-item { animation: slideIn 0.3s ease-out; }
     .notification-panel-mobile {
       position: fixed;
       top: 50%;
@@ -120,28 +92,10 @@
       flex-direction: column;
       overflow: hidden;
     }
-    .notification-panel-mobile .panel-header {
-      padding: 1rem;
-      border-bottom: 1px solid #1e293b;
-      background: #0f172a;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .notification-panel-mobile .panel-content {
-      flex: 1;
-      overflow-y: auto;
-      max-height: 60vh;
-    }
-    .notification-panel-mobile .panel-footer {
-      padding: 0.75rem;
-      border-top: 1px solid #1e293b;
-      background: #0f172a;
-    }
-    @media (max-width: 640px) {
-      .notification-panel-mobile { width: 95%; max-height: 85vh; border-radius: 1rem; }
-      .notification-panel-mobile .panel-content { max-height: 65vh; }
-    }
+    .notification-panel-mobile .panel-header { padding: 1rem; border-bottom: 1px solid #1e293b; background: #0f172a; display: flex; justify-content: space-between; align-items: center; }
+    .notification-panel-mobile .panel-content { flex: 1; overflow-y: auto; max-height: 60vh; }
+    .notification-panel-mobile .panel-footer { padding: 0.75rem; border-top: 1px solid #1e293b; background: #0f172a; }
+    @media (max-width: 640px) { .notification-panel-mobile { width: 95%; max-height: 85vh; border-radius: 1rem; } .notification-panel-mobile .panel-content { max-height: 65vh; } }
     .notification-backdrop {
       position: fixed;
       top: 0;
@@ -152,26 +106,39 @@
       backdrop-filter: blur(4px);
       z-index: 999;
     }
-    
-    /* أنماط المخزن */
-    .inventory-item {
-      transition: all 0.2s;
-    }
-    .inventory-item:hover {
-      background: rgba(255,255,255,0.05);
-    }
-    .inventory-actions {
-      opacity: 0.7;
-      transition: opacity 0.2s;
-    }
-    .inventory-item:hover .inventory-actions {
-      opacity: 1;
-    }
+    .inventory-item { transition: all 0.2s; }
+    .inventory-item:hover { background: rgba(255,255,255,0.05); }
+    .inventory-actions { opacity: 0.7; transition: opacity 0.2s; }
+    .inventory-item:hover .inventory-actions { opacity: 1; }
+    .form-row { margin-bottom: 16px; }
+    .form-row label { display: block; font-size: 14px; color: #94a3b8; margin-bottom: 4px; }
+    .form-row select, .form-row input, .form-row textarea { width: 100%; padding: 10px 12px; background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; color: white; font-size: 14px; }
+    .form-row select:focus, .form-row input:focus, .form-row textarea:focus { outline: none; border-color: #f59e0b; }
   </style>
 </head>
 <body class="h-full bg-slate-950 text-slate-100">
 
 <script>
+// ============== بيانات المحافظات والمناطق (مثل برنامج الزعيم) ==============
+const governorates = [
+  { code: 'BGD', name: 'بغداد', areas: ['الكرادة', 'المنصور', 'الزعفرانية', 'الشعب', 'الغدير', 'الحرية', 'الصدرية', 'الأعظمية', 'الكاظمية', 'الصالحية'] },
+  { code: 'BAS', name: 'البصرة', areas: ['الهارثة', 'الزبير', 'الفاو', 'أبو الخصيب', 'القرنة', 'المدينة', 'سوق الشيوخ'] },
+  { code: 'NIN', name: 'نينوى', areas: ['الموصل', 'الحمدانية', 'سنجار', 'تلعفر', 'القحطانية'] },
+  { code: 'ARB', name: 'أربيل', areas: ['أربيل', 'شقلاوة', 'كويسنجق', 'مخمور'] },
+  { code: 'NJF', name: 'النجف', areas: ['النجف', 'الكوفة', 'الحيرة', 'المناذرة'] },
+  { code: 'KRK', name: 'كركوك', areas: ['كركوك', 'الدبس', 'الحويجة', 'الرياض'] },
+  { code: 'ANA', name: 'الأنبار', areas: ['الرمادي', 'الفلوجة', 'حديثة', 'القائم'] },
+  { code: 'KAR', name: 'كربلاء', areas: ['كربلاء', 'عين التمر', 'الحسينية'] },
+  { code: 'DHI', name: 'ذي قار', areas: ['الناصرية', 'الرفاعي', 'سوق الشيوخ', 'الشطرة'] },
+  { code: 'MAY', name: 'ميسان', areas: ['العمارة', 'الكحلاء', 'الميمونة'] },
+  { code: 'BAB', name: 'بابل', areas: ['الحلة', 'المسيب', 'الهاشمية', 'الكفل'] },
+  { code: 'WAS', name: 'واسط', areas: ['الكوت', 'الصويرة', 'النعمانية'] },
+  { code: 'SAL', name: 'صلاح الدين', areas: ['تكريت', 'سامراء', 'الضلوعية', 'بلد'] },
+  { code: 'DIY', name: 'ديالى', areas: ['بعقوبة', 'المقدادية', 'خانقين', 'بلدروز'] },
+  { code: 'MUT', name: 'المثنى', areas: ['السماوة', 'الرميثة', 'الخضر'] },
+  { code: 'QAD', name: 'القادسية', areas: ['الديوانية', 'عفك', 'الشامية'] }
+];
+
 // ============== إعدادات Firebase ==============
 const firebaseConfig = {
   apiKey: "AIzaSyBBRW9XT2wdeBlKh9Fs50H68FUItv68Jbw",
@@ -184,23 +151,16 @@ const firebaseConfig = {
 };
 
 const VAPID_KEY = "BA2ONQejtLqvY0xKKIy0WaG3SAc1CCVm1xqvUhHI1gzxxlqGq65sGei8OroEqAK1haxQygk_2cp8Ugf-jyt3tWA";
-
-// الربح الثابت للمندوب (افتراضي 1000 دينار)
 const DEFAULT_AGENT_PROFIT = 1000;
 
-// تهيئة Firebase
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-// ============== دالة حفظ FCM Token في الخادم ==============
 async function saveTokenToServer(token) {
     let userId = 'admin';
     if (currentUser) {
-        if (currentUser.agent_code) {
-            userId = currentUser.agent_code;
-        } else if (currentUser.type === 'admin') {
-            userId = 'admin';
-        }
+        if (currentUser.agent_code) userId = currentUser.agent_code;
+        else if (currentUser.type === 'admin') userId = 'admin';
     }
     try {
         const response = await fetch('/api/fcm-token', {
@@ -208,66 +168,33 @@ async function saveTokenToServer(token) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: userId, fcm_token: token })
         });
-        if (response.ok) console.log('✅ تم حفظ FCM Token في الخادم للمستخدم:', userId);
+        if (response.ok) console.log('✅ تم حفظ FCM Token للمستخدم:', userId);
     } catch (error) { console.error('❌ خطأ في حفظ FCM Token:', error); }
 }
 
-// ============== طلب إذن الإشعارات عند تحميل الصفحة (معدل) ==============
 async function requestNotificationPermission() {
   try {
-    // طلب الإذن من المستخدم
     const permission = await Notification.requestPermission();
-    
     if (permission === 'granted') {
       console.log('✅ تم منح إذن الإشعارات');
-      
-      // الحصول على FCM Token
       const token = await messaging.getToken({ vapidKey: VAPID_KEY });
       if (token) {
         console.log('✅ FCM Token:', token);
         localStorage.setItem('fcm_token', token);
-        
-        // إذا كان هناك مستخدم مسجل دخوله، نحفظ token في الخادم
-        if (currentUser) {
-          await saveTokenToServer(token);
-        }
+        if (currentUser) await saveTokenToServer(token);
       }
-      
-      // استقبال الإشعارات عندما تكون الصفحة مفتوحة
       messaging.onMessage((payload) => {
         console.log('📨 إشعار واصل:', payload);
-        if (typeof showToast === 'function') {
-          showToast(`🔔 ${payload.notification?.title}: ${payload.notification?.body}`);
-        }
-        if (typeof addNotification === 'function') {
-          addNotification(
-            payload.notification?.title || 'تنبيه',
-            payload.notification?.body || 'لديك إشعار جديد',
-            'firebase'
-          );
-        }
+        if (typeof showToast === 'function') showToast(`🔔 ${payload.notification?.title}: ${payload.notification?.body}`);
+        if (typeof addNotification === 'function') addNotification(payload.notification?.title || 'تنبيه', payload.notification?.body || 'لديك إشعار جديد', 'firebase');
       });
-      
-    } else {
-      console.log('❌ لم يتم منح إذن الإشعارات');
     }
-  } catch (error) {
-    console.error('❌ خطأ في طلب الإذن:', error);
-  }
+  } catch (error) { console.error('❌ خطأ في طلب الإذن:', error); }
 }
 
-// ============== دالة التهيئة القديمة (للتوافق) ==============
-async function initFirebaseNotifications() {
-  await requestNotificationPermission();
-}
-
-// ============== حفظ حالة تسجيل الدخول ==============
 function saveLoginState() {
-    if (currentUser) {
-        localStorage.setItem('trust_login_state', JSON.stringify({ user: currentUser, isAgentMode: isAgentMode, timestamp: Date.now() }));
-    }
+    if (currentUser) localStorage.setItem('trust_login_state', JSON.stringify({ user: currentUser, isAgentMode: isAgentMode, timestamp: Date.now() }));
 }
-
 function loadLoginState() {
     const saved = localStorage.getItem('trust_login_state');
     if (saved) {
@@ -277,19 +204,55 @@ function loadLoginState() {
                 currentUser = loginData.user;
                 isAgentMode = loginData.isAgentMode;
                 return true;
-            } else { localStorage.removeItem('trust_login_state'); }
+            } else localStorage.removeItem('trust_login_state');
         } catch(e) { console.log('خطأ في تحميل حالة تسجيل الدخول'); }
     }
     return false;
 }
 function clearLoginState() { localStorage.removeItem('trust_login_state'); }
 
-// ============== بدء التشغيل (طلب الإشعارات فوراً) ==============
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // طلب إذن الإشعارات فوراً (حتى قبل تسجيل الدخول)
-    requestNotificationPermission();
+  window.addEventListener('load', () => { requestNotificationPermission(); });
+}
+
+// ============== دوال المحافظات والمناطق ==============
+function loadGovernorates(selectedCode) {
+  const select = document.getElementById('governorateSelect');
+  if (!select) return;
+  select.innerHTML = '<option value="">-- اختر المحافظة --</option>';
+  governorates.forEach(gov => {
+    const option = document.createElement('option');
+    option.value = gov.code;
+    option.textContent = gov.name;
+    if (selectedCode === gov.code) option.selected = true;
+    select.appendChild(option);
   });
+}
+
+function loadAreas(selectedArea) {
+  const governorateCode = document.getElementById('governorateSelect').value;
+  const areaSelect = document.getElementById('areaSelect');
+  if (!areaSelect) return;
+  if (!governorateCode) {
+    areaSelect.innerHTML = '<option value="">-- اختر المنطقة --</option>';
+    areaSelect.disabled = true;
+    return;
+  }
+  const governorate = governorates.find(g => g.code === governorateCode);
+  if (governorate) {
+    areaSelect.disabled = false;
+    areaSelect.innerHTML = '<option value="">-- اختر المنطقة --</option>';
+    governorate.areas.forEach(area => {
+      const option = document.createElement('option');
+      option.value = area;
+      option.textContent = area;
+      if (selectedArea === area) option.selected = true;
+      areaSelect.appendChild(option);
+    });
+  } else {
+    areaSelect.innerHTML = '<option value="">-- اختر المنطقة --</option>';
+    areaSelect.disabled = true;
+  }
 }
 </script>
 
@@ -389,7 +352,7 @@ if ('serviceWorker' in navigator) {
         <div class="flex items-center gap-2"><select id="filterStatus" onchange="renderOrders()" class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300"><option value="all">كل الحالات</option><option value="جديد">جديد</option><option value="قيد التوصيل">قيد التوصيل</option><option value="واصل">واصل</option><option value="راجع">راجع</option></select></div>
         <input id="searchOrders" oninput="renderOrders()" type="text" placeholder="بحث بالاسم أو الهاتف..." class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300 w-56">
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody></table></div></div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></table></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody>阅读</div></div>
     </div>
 
     <!-- Agents Page -->
@@ -404,17 +367,12 @@ if ('serviceWorker' in navigator) {
       <div class="bg-slate-900 border border-slate-800 rounded-xl p-6"><h3 class="font-700 mb-4">سجل العملاء</h3><div id="customersDetail" class="text-center text-slate-500">ستظهر بيانات العملاء تلقائياً عند إضافة الطلبات</div></div>
     </div>
 
-    <!-- Inventory Page (معدل مع أزرار المسح) -->
+    <!-- Inventory Page -->
     <div id="page-inventory" class="page-content p-6 fade-in hidden">
       <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
         <div class="flex justify-between items-center mb-6 flex-wrap gap-3">
-          <div>
-            <i data-lucide="package" style="width:32px;height:32px;color:#f59e0b" class="inline-block ml-2"></i>
-            <h3 class="font-700 text-lg inline-block">إدارة المخزن</h3>
-          </div>
-          <button onclick="clearAllInventory()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition">
-            <i data-lucide="trash-2" style="width:16px;height:16px"></i> مسح المخزن بالكامل
-          </button>
+          <div><i data-lucide="package" style="width:32px;height:32px;color:#f59e0b" class="inline-block ml-2"></i><h3 class="font-700 text-lg inline-block">إدارة المخزن</h3></div>
+          <button onclick="clearAllInventory()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition"><i data-lucide="trash-2" style="width:16px;height:16px"></i> مسح المخزن بالكامل</button>
         </div>
         <p class="text-slate-500 text-sm mb-6">يتم تتبع المنتجات تلقائياً من خلال الطلبات المسجلة</p>
         <div id="inventoryList" class="space-y-2"></div>
@@ -447,11 +405,31 @@ if ('serviceWorker' in navigator) {
 </div>
 
 <!-- Modals -->
-<div id="orderModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeOrderModal()"></div><div class="absolute inset-y-0 left-0 w-full max-w-md bg-slate-900 border-r border-slate-800 overflow-auto shadow-2xl"><div class="p-5 border-b border-slate-800 flex justify-between"><h3 class="font-700 text-lg">➕ طلب جديد</h3><button onclick="closeOrderModal()"><i data-lucide="x"></i></button></div><form id="orderForm" onsubmit="handleOrderSubmit(event)" class="p-5 space-y-4"><div><label class="block text-sm text-slate-400 mb-1">👤 اسم الزبون</label><input id="f_name" required placeholder="أدخل اسم الزبون" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📞 رقم الهاتف</label><input id="f_phone" required placeholder="أدخل رقم الهاتف" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📍 العنوان</label><input id="f_address" required placeholder="أدخل العنوان" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📦 المنتج</label><input id="f_product" required placeholder="اسم المنتج" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div class="grid grid-cols-2 gap-3"><div><label class="block text-sm text-slate-400 mb-1">🔢 الكمية</label><input id="f_qty" type="number" value="1" placeholder="الكمية" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">💰 السعر (د.ع)</label><input id="f_price" type="number" required placeholder="السعر" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div></div><div><label class="block text-sm text-slate-400 mb-1">📅 التاريخ</label><input id="f_date" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📌 ملاحظة (اختياري)</label><textarea id="f_note" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 resize-none" placeholder="أضف ملاحظة للطلب..."></textarea></div><button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-3 rounded-lg font-700 mt-4">💾 حفظ الطلب</button></form></div></div>
+<div id="orderModal" class="fixed inset-0 z-50 hidden">
+  <div class="modal-overlay absolute inset-0" onclick="closeOrderModal()"></div>
+  <div class="absolute inset-y-0 left-0 w-full max-w-md bg-slate-900 border-r border-slate-800 overflow-auto shadow-2xl">
+    <div class="p-5 border-b border-slate-800 flex justify-between">
+      <h3 class="font-700 text-lg">➕ طلب جديد</h3>
+      <button onclick="closeOrderModal()"><i data-lucide="x"></i></button>
+    </div>
+    <form id="orderForm" onsubmit="handleOrderSubmit(event)" class="p-5 space-y-4">
+      <div class="form-row"><label>👤 اسم الزبون</label><input id="f_name" required placeholder="أدخل اسم الزبون"></div>
+      <div class="form-row"><label>📞 رقم الهاتف</label><input id="f_phone" required placeholder="أدخل رقم الهاتف"></div>
+      <div class="form-row"><label>🏙️ المحافظة</label><select id="governorateSelect" required onchange="loadAreas()"><option value="">-- اختر المحافظة --</option></select></div>
+      <div class="form-row"><label>🏘️ المنطقة / الحي</label><select id="areaSelect" required disabled><option value="">-- اختر المنطقة --</option></select></div>
+      <div class="form-row"><label>📍 العنوان التفصيلي</label><input id="f_address" placeholder="العنوان التفصيلي"></div>
+      <div class="form-row"><label>📦 المنتج</label><input id="f_product" required placeholder="اسم المنتج"></div>
+      <div class="grid grid-cols-2 gap-4"><div class="form-row"><label>🔢 الكمية</label><input id="f_qty" type="number" value="1" placeholder="الكمية"></div><div class="form-row"><label>💰 السعر الإجمالي (د.ع)</label><input id="f_price" type="number" required placeholder="السعر الإجمالي"></div></div>
+      <div class="form-row"><label>📅 التاريخ</label><input id="f_date" type="date"></div>
+      <div class="form-row"><label>📌 ملاحظة (اختياري)</label><textarea id="f_note" rows="2" placeholder="أضف ملاحظة للطلب..."></textarea></div>
+      <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-3 rounded-lg font-700 mt-4">💾 حفظ الطلب</button>
+    </form>
+  </div>
+</div>
 
 <div id="editDateModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditDateModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl"><h3 class="font-700 text-lg mb-4">📅 تعديل تاريخ الطلب</h3><p id="editDateCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p><input id="editDateInput" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 mb-4"><div class="flex gap-3"><button onclick="closeEditDateModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button onclick="confirmEditDate()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ</button></div></div></div>
 
-<div id="agentModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeAgentModal()"></div><div class="absolute inset-y-0 left-0 w-full max-w-md bg-slate-900 border-r border-slate-800 overflow-auto shadow-2xl"><div class="p-5 border-b border-slate-800 flex justify-between"><h3 id="agentModalTitle" class="font-700 text-lg">➕ إضافة مندوب</h3><button onclick="closeAgentModal()"><i data-lucide="x"></i></button></div><form id="agentForm" onsubmit="handleAgentSubmit(event)" class="p-5 space-y-4"><div><label class="block text-sm text-slate-400 mb-1">👤 اسم المندوب</label><input id="agent_name" required placeholder="اسم المندوب" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">📞 رقم الهاتف</label><input id="agent_phone" required placeholder="رقم الهاتف" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">🔑 كود المندوب</label><input id="agent_code" required placeholder="كود المندوب" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">🔒 كلمة المرور</label><input id="agent_password" type="password" required placeholder="كلمة المرور" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">💰 الربح الثابت لكل طلب (د.ع)</label><input id="agent_profit_per_order" type="number" value="1000" placeholder="الربح الثابت لكل طلب" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-700">💾 حفظ المندوب</button></form></div></div>
+<div id="agentModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeAgentModal()"></div><div class="absolute inset-y-0 left-0 w-full max-w-md bg-slate-900 border-r border-slate-800 overflow-auto shadow-2xl"><div class="p-5 border-b border-slate-800 flex justify-between"><h3 id="agentModalTitle" class="font-700 text-lg">➕ إضافة مندوب</h3><button onclick="closeAgentModal()"><i data-lucide="x"></i></button></div><form id="agentForm" onsubmit="handleAgentSubmit(event)" class="p-5 space-y-4"><div class="form-row"><label>👤 اسم المندوب</label><input id="agent_name" required placeholder="اسم المندوب"></div><div class="form-row"><label>📞 رقم الهاتف</label><input id="agent_phone" required placeholder="رقم الهاتف"></div><div class="form-row"><label>🔑 كود المندوب</label><input id="agent_code" required placeholder="كود المندوب"></div><div class="form-row"><label>🔒 كلمة المرور</label><input id="agent_password" type="password" required placeholder="كلمة المرور"></div><div class="form-row"><label>💰 الربح الثابت لكل طلب (د.ع)</label><input id="agent_profit_per_order" type="number" value="1000" placeholder="الربح الثابت لكل طلب"></div><button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-700">💾 حفظ المندوب</button></form></div></div>
 
 <div id="editAgentModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditAgentModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96 shadow-2xl"><h3 class="font-700 text-lg mb-4">✏️ تعديل بيانات المندوب</h3><div class="space-y-3"><div class="bg-slate-800 rounded-lg p-3"><p class="text-slate-400 text-sm">🆔 كود المندوب</p><p id="editAgentId" class="text-white font-bold">-</p></div><div class="bg-slate-800 rounded-lg p-3"><p class="text-slate-400 text-sm">👤 اسم المندوب</p><p id="editAgentName" class="text-white font-bold">-</p></div><div class="bg-slate-800 rounded-lg p-3"><p class="text-slate-400 text-sm">🔑 كود الدخول</p><p id="editAgentCode" class="text-white font-bold">-</p></div><div><label class="block text-slate-400 text-sm mb-1">💰 الربح الثابت لكل طلب (د.ع)</label><input id="editAgentProfit" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div></div><div class="flex gap-3 mt-6"><button onclick="closeEditAgentModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg">إلغاء</button><button onclick="saveEditAgent()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ التعديلات</button></div></div></div>
 
@@ -481,9 +459,7 @@ let pendingNotesOrderId = null;
 let currentEditAgent = null;
 let editingDateOrderId = null;
 let editingNoteOrderId = null;
-let inventoryData = {};  // تخزين بيانات المخزن بشكل منفصل
-
-// ============== نظام الإشعارات ==============
+let inventoryData = {};
 let notifications = [];
 let lastDataHash = null;
 let notificationPanelOpen = false;
@@ -569,7 +545,6 @@ function checkForDataChanges() {
   lastDataHash = currentHash;
 }
 
-// ============== DATA SDK ==============
 const dataHandler = {
   onDataChanged(data) {
     console.log("🔔 [DATA] تحديث البيانات من الخادم");
@@ -626,7 +601,6 @@ async function handleLogin(e) {
   if (username === 'admin' && password === 'admin123') {
     currentUser = { type: 'admin', agent_name: 'المدير العام' }; isAgentMode = false;
     btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons(); showApp(); saveLoginState(); showToast('مرحباً في لوحة التحكم الإدارية'); 
-    // بعد تسجيل الدخول، نحاول حفظ FCM Token مرة أخرى
     const token = localStorage.getItem('fcm_token');
     if (token) await saveTokenToServer(token);
     return;
@@ -757,7 +731,6 @@ function renderCustomers() {
   el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
 }
 
-// ============== عرض المخزن (معدل مع أزرار المسح) ==============
 function renderInventory() {
   const products = {};
   allOrders.forEach(o => { 
@@ -845,10 +818,20 @@ function renderReports() {
 }
 function exportCSV() { if (!allOrders.length) { showToast('لا توجد بيانات'); return; } const headers = ['الزبون','الهاتف','العنوان','المنتج','الكمية','السعر','الإجمالي','المندوب','التاريخ','الحالة','الملاحظات']; const rows = allOrders.map(o => [o.customer_name, o.customer_phone, o.customer_address, o.product, o.quantity, o.price, o.total, o.agent_name, o.order_date || '', o.status, o.admin_notes || '']); const csv = '\uFEFF' + [headers, ...rows].map(r => r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'orders.csv'; a.click(); showToast('📥 تم التصدير'); }
 
-function showNewOrderModal() { document.getElementById('orderModal').classList.remove('hidden'); document.getElementById('orderForm').reset(); document.getElementById('f_qty').value = '1'; const today = new Date().toISOString().split('T')[0]; document.getElementById('f_date').value = today; createFlowersFromTop(); }
+function showNewOrderModal() {
+  document.getElementById('orderModal').classList.remove('hidden');
+  document.getElementById('orderForm').reset();
+  document.getElementById('f_qty').value = '1';
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f_date').value = today;
+  // تحميل المحافظات
+  loadGovernorates();
+  loadAreas();
+  createFlowersFromTop();
+}
 function closeOrderModal() { document.getElementById('orderModal').classList.add('hidden'); }
 
-// تعديل دالة إضافة الطلب لجعل الربح ثابتاً حسب المندوب
+// ============== دالة إضافة الطلب المعدلة (السعر ثابت وليس مضروب بالكمية) ==============
 async function handleOrderSubmit(e) { 
   e.preventDefault(); 
   const btn = e.target.querySelector('button[type="submit"]'); 
@@ -857,14 +840,14 @@ async function handleOrderSubmit(e) {
   
   const qty = parseInt(document.getElementById('f_qty').value) || 1; 
   const price = parseFloat(document.getElementById('f_price').value) || 0; 
-  const total = qty * price; 
+  // السعر الإجمالي = السعر المدخل (ثابت وليس مضروباً بالكمية)
+  const total = price; 
   let agentName = 'مندوب';
   
   if (isAgentMode && currentUser) {
     agentName = (currentUser.agent_name || '').trim();
   }
   
-  // الربح الثابت حسب المندوب (يتم جلبه من بيانات المندوب، افتراضي 1000 دينار)
   let profitPerOrder = DEFAULT_AGENT_PROFIT;
   if (isAgentMode && currentUser && currentUser.agent_profit_per_order) {
     profitPerOrder = currentUser.agent_profit_per_order;
@@ -875,18 +858,27 @@ async function handleOrderSubmit(e) {
     }
   }
   
-  // الربح ثابت بغض النظر عن الكمية
   const profit = profitPerOrder;
-  
   const orderDate = document.getElementById('f_date').value || new Date().toISOString().split('T')[0];
   const note = document.getElementById('f_note').value.trim();
   const customerName = document.getElementById('f_name').value.trim();
+  
+  // بناء العنوان الكامل مع المحافظة والمنطقة
+  const governorateSelect = document.getElementById('governorateSelect');
+  const areaSelect = document.getElementById('areaSelect');
+  const governorateName = governorateSelect.options[governorateSelect.selectedIndex]?.text || '';
+  const areaName = areaSelect.value || '';
+  const addressDetail = document.getElementById('f_address').value.trim();
+  let fullAddress = '';
+  if (governorateName) fullAddress += governorateName;
+  if (areaName) fullAddress += (fullAddress ? ' - ' : '') + areaName;
+  if (addressDetail) fullAddress += (fullAddress ? ' - ' : '') + addressDetail;
   
   const result = await window.dataSdk.create({ 
     type: 'order', 
     customer_name: customerName, 
     customer_phone: document.getElementById('f_phone').value.trim(), 
-    customer_address: document.getElementById('f_address').value.trim(), 
+    customer_address: fullAddress,
     product: document.getElementById('f_product').value.trim(), 
     quantity: qty, 
     price: price, 
@@ -961,11 +953,32 @@ function openDeleteConfirm(id, type) {
   event.stopPropagation();
   if (type === 'order') pendingDeleteRecord = allOrders.find(o => o.__backendId === id); 
   else pendingDeleteRecord = allAgents.find(a => a.__backendId === id); 
-  document.getElementById('deleteConfirmText').textContent = type === 'order' ? '🗑️ حذف الطلب؟' : '🗑️ حذف المندوب؟'; 
+  document.getElementById('deleteConfirmText').textContent = type === 'order' ? '🗑️ حذف الطلب؟ (سيتم حذفه من الزعيم أيضاً)' : '🗑️ حذف المندوب؟'; 
   document.getElementById('deleteConfirm').classList.remove('hidden'); 
 }
 function closeDeleteConfirm() { document.getElementById('deleteConfirm').classList.add('hidden'); pendingDeleteRecord = null; }
-async function confirmDelete() { if (!pendingDeleteRecord) return; const result = await window.dataSdk.delete(pendingDeleteRecord); closeDeleteConfirm(); showToast(result.isOk ? '✅ تم الحذف' : '❌ حدث خطأ'); }
+async function confirmDelete() { 
+  if (!pendingDeleteRecord) return; 
+  // إذا كان الطلب يحتوي على jenni_shipment_id، نحذفه من الزعيم أولاً
+  if (pendingDeleteRecord.jenni_shipment_id && pendingDeleteRecord.jenni_shipment_id !== 'null') {
+    try {
+      console.log(`🗑️ محاولة حذف الطلب ${pendingDeleteRecord.jenni_shipment_id} من نظام الزعيم...`);
+      const deleteResponse = await fetch(`/api/delete-from-jenni/${pendingDeleteRecord.jenni_shipment_id}`, { method: 'DELETE' });
+      const result = await deleteResponse.json();
+      if (result.success) {
+        console.log('✅ تم حذف الطلب من نظام الزعيم');
+        addNotification('حذف من الزعيم', `تم حذف الطلب رقم ${pendingDeleteRecord.jenni_shipment_id} من نظام الزعيم`, 'status');
+      } else {
+        console.log('⚠️ فشل حذف الطلب من الزعيم:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ خطأ في حذف الزعيم:', error);
+    }
+  }
+  const result = await window.dataSdk.delete(pendingDeleteRecord); 
+  closeDeleteConfirm(); 
+  showToast(result.isOk ? '✅ تم الحذف' : '❌ حدث خطأ'); 
+}
 
 function openStatusModal(id) { 
   if (isAgentMode) { 
@@ -1040,11 +1053,12 @@ function showToast(msg) {
   setTimeout(() => toast.classList.add('hidden'), 2500); 
 }
 
-// ============== التحقق من حالة تسجيل الدخول السابقة عند تحميل الصفحة ==============
+// تحميل المحافظات عند بدء التشغيل
+loadGovernorates();
+
 if (loadLoginState()) {
     console.log("🔄 استعادة جلسة سابقة للمستخدم:", currentUser?.agent_name || currentUser?.type);
     showApp();
-    // بعد استعادة الجلسة، نحاول حفظ FCM Token مرة أخرى
     const token = localStorage.getItem('fcm_token');
     if (token) saveTokenToServer(token);
 } else {
