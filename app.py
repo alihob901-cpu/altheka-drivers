@@ -60,29 +60,6 @@ except Exception as e:
     print(f"❌ خطأ في الاتصال بـ Supabase: {e}")
     supabase = None
 
-# ============== دالة تحويل المحافظات ==============
-def get_governorate_code(governorate_name):
-    """تحويل اسم المحافظة إلى الكود المستخدم في نظام الزعيم"""
-    governorate_map = {
-        'بغداد': 'BGD',
-        'البصرة': 'BAS',
-        'نينوى': 'NIN',
-        'أربيل': 'ARB',
-        'النجف': 'NJF',
-        'كركوك': 'KRK',
-        'الأنبار': 'ANA',
-        'كربلاء': 'KAR',
-        'ذي قار': 'DHI',
-        'ميسان': 'MAY',
-        'بابل': 'BAB',
-        'واسط': 'WAS',
-        'صلاح الدين': 'SAL',
-        'ديالى': 'DIY',
-        'المثنى': 'MUT',
-        'القادسية': 'QAD'
-    }
-    return governorate_map.get(governorate_name, 'BGD')
-
 # ============== دوال نظام الزعيم ==============
 def jenni_login():
     """تسجيل الدخول إلى نظام الزعيم والحصول على JWT token"""
@@ -136,22 +113,6 @@ def create_shipment_in_jenni(order_data):
     
     print(f"✅ تم الحصول على التوكن")
     
-    # استخراج المحافظة من العنوان أو من الحقل المنفصل
-    full_address = order_data.get("customer_address", "")
-    governorate_name = "بغداد"  # القيمة الافتراضية
-    
-    # محاولة استخراج المحافظة من بداية العنوان (مثل "كربلاء - ...")
-    if full_address:
-        parts = full_address.split(' - ')
-        if parts and parts[0] in ['بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء', 'ذي قار', 'ميسان', 'بابل', 'واسط', 'صلاح الدين', 'ديالى', 'المثنى', 'القادسية']:
-            governorate_name = parts[0]
-    
-    # إذا كان هناك حقل governorate منفصل، استخدمه
-    if order_data.get("governorate"):
-        governorate_name = order_data.get("governorate")
-    
-    governorate_code = get_governorate_code(governorate_name)
-    
     # تحويل بيانات الطلب إلى صيغة الزعيم
     shipment_payload = {
         "system_code": JENNI_SYSTEM_CODE,
@@ -160,8 +121,8 @@ def create_shipment_in_jenni(order_data):
             "external_shipment_id": order_data.get("__backendId", ""),
             "receiver_name": order_data.get("customer_name", "")[:50],
             "receiver_phone_1": order_data.get("customer_phone", ""),
-            "governorate_code": governorate_code,
-            "city": governorate_name,
+            "governorate_code": "BGD",
+            "city": "بغداد",
             "address": order_data.get("customer_address", "")[:100],
             "amount_iqd": float(order_data.get("total", 0)),
             "quantity": order_data.get("quantity", 1),
@@ -169,7 +130,6 @@ def create_shipment_in_jenni(order_data):
         }]
     }
     
-    print(f"📍 المحافظة المرسلة: {governorate_name} -> {governorate_code}")
     print(f"📦 الحمولة المرسلة: {json.dumps(shipment_payload, ensure_ascii=False)[:300]}")
     
     try:
@@ -208,7 +168,7 @@ def create_shipment_in_jenni(order_data):
 
 # ============== دالة حذف الطلب من نظام الزعيم ==============
 def delete_shipment_from_jenni(shipment_number):
-    """حذف شحنة من نظام الزعيم ومن قاعدة البيانات المحلية"""
+    """حذف شحنة من نظام الزعيم باستخدام رقم الشحنة"""
     print(f"🗑️ محاولة حذف الطلب {shipment_number} من نظام الزعيم...")
     
     token = jenni_get_token()
@@ -249,11 +209,7 @@ def delete_shipment_from_jenni(shipment_number):
                     
                     if delete_response.status_code == 200:
                         print(f"✅ تم حذف الطلب {shipment_number} من نظام الزعيم بنجاح")
-                        # ✅ إضافة: حذف الطلب من Supabase أيضاً
-                        if supabase:
-                            supabase.table('orders').delete().eq('__backendId', shipment_number).execute()
-                            print(f"✅ تم حذف الطلب {shipment_number} من قاعدة البيانات أيضاً")
-                        return {"success": True, "message": "تم حذف الطلب من نظام الزعيم وقاعدة البيانات"}
+                        return {"success": True, "message": "تم حذف الطلب من نظام الزعيم"}
                     else:
                         print(f"⚠️ فشل حذف الطلب: {delete_response.status_code}")
                         return {"success": False, "error": f"فشل الحذف: {delete_response.status_code}"}
