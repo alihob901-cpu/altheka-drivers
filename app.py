@@ -63,7 +63,7 @@ except Exception as e:
 # ============== قائمة المحافظات ==============
 GOVERNORATES_LIST = ['بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء', 'ذي قار', 'ميسان', 'بابل', 'واسط', 'صلاح الدين', 'ديالى', 'المثنى', 'القادسية']
 
-# ============== دالة تحويل المحافظات ==============
+# ============== دالة تحويل المحافظات (مصححة حسب توثيق نظام الزعيم) ==============
 def get_governorate_code(governorate_name):
     """تحويل اسم المحافظة إلى الكود المستخدم في نظام الزعيم"""
     governorate_map = {
@@ -73,18 +73,20 @@ def get_governorate_code(governorate_name):
         'أربيل': 'ARB',
         'النجف': 'NJF',
         'كركوك': 'KRK',
-        'الأنبار': 'ANA',
-        'كربلاء': 'KAR',
+        'الأنبار': 'ANB',
+        'كربلاء': 'KRB',      # ✅ تم التصحيح من KAR إلى KRB
         'ذي قار': 'DHI',
-        'ميسان': 'MAY',
-        'بابل': 'BAB',
-        'واسط': 'WAS',
-        'صلاح الدين': 'SAL',
-        'ديالى': 'DIY',
-        'المثنى': 'MUT',
+        'ميسان': 'MYS',
+        'بابل': 'BBL',
+        'واسط': 'WST',
+        'صلاح الدين': 'SAH',
+        'ديالى': 'DYL',
+        'المثنى': 'MTH',
         'القادسية': 'QAD'
     }
-    return governorate_map.get(governorate_name, 'BGD')
+    code = governorate_map.get(governorate_name, 'BGD')
+    print(f"🗺️ تحويل {governorate_name} -> {code}")
+    return code
 
 # ============== API لجلب قائمة المحافظات ==============
 @app.route('/api/governorates', methods=['GET'])
@@ -223,7 +225,7 @@ def create_shipment_in_jenni(order_data):
                     return {"success": False, "error": f"مرفوض: {reason}", "skip": True}
             elif response.status_code == 401:
                 print(f"⚠️ فشل المصادقة بالطريقة الحالية، جرب الطريقة التالية...")
-                continue  # جرب الطريقة التالية
+                continue
             else:
                 print(f"❌ فشل الإرسال: {response.status_code}")
                 return {"success": False, "error": f"فشل الإرسال: {response.status_code}", "skip": True}
@@ -249,7 +251,7 @@ def delete_shipment_from_jenni(shipment_number):
     for auth_method in auth_methods:
         try:
             delete_response = requests.delete(
-                f"{JENNI_API_URL}/v2/shipments/{shipment_number}",
+                f"{JENNI_API_URL}/v2/orders/{shipment_number}",
                 headers={
                     "Content-Type": "application/json",
                     "Authorization": auth_method
