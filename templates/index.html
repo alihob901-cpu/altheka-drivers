@@ -169,6 +169,7 @@ async function saveTokenToServer(token) {
             body: JSON.stringify({ user_id: userId, fcm_token: token })
         });
         if (response.ok) console.log('✅ تم حفظ FCM Token للمستخدم:', userId);
+        else console.log('⚠️ فشل حفظ FCM Token لكن التطبيق سيعمل');
     } catch (error) { console.error('❌ خطأ في حفظ FCM Token:', error); }
 }
 
@@ -818,18 +819,39 @@ function renderReports() {
 }
 function exportCSV() { if (!allOrders.length) { showToast('لا توجد بيانات'); return; } const headers = ['الزبون','الهاتف','العنوان','المنتج','الكمية','السعر','الإجمالي','المندوب','التاريخ','الحالة','الملاحظات']; const rows = allOrders.map(o => [o.customer_name, o.customer_phone, o.customer_address, o.product, o.quantity, o.price, o.total, o.agent_name, o.order_date || '', o.status, o.admin_notes || '']); const csv = '\uFEFF' + [headers, ...rows].map(r => r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'orders.csv'; a.click(); showToast('📥 تم التصدير'); }
 
+// ============== دالة فتح نافذة الطلب الجديد (معدلة ومحسنة) ==============
 function showNewOrderModal() {
-  document.getElementById('orderModal').classList.remove('hidden');
-  document.getElementById('orderForm').reset();
-  document.getElementById('f_qty').value = '1';
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('f_date').value = today;
-  // تحميل المحافظات
+  console.log("🔧 محاولة فتح نافذة الطلب الجديد");
+  const modal = document.getElementById('orderModal');
+  if (!modal) {
+    console.error("❌ orderModal غير موجود في الصفحة!");
+    alert("خطأ: لم يتم العثور على نافذة الطلب");
+    return;
+  }
+  modal.classList.remove('hidden');
+  console.log("✅ تم إزالة class='hidden'");
+  
+  // إعادة تعيين النموذج
+  const form = document.getElementById('orderForm');
+  if (form) form.reset();
+  
+  const qtyInput = document.getElementById('f_qty');
+  if (qtyInput) qtyInput.value = '1';
+  
+  const dateInput = document.getElementById('f_date');
+  if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+  
+  // تحميل المحافظات والمناطق
   loadGovernorates();
   loadAreas();
+  
+  // إضافة زهور الاحتفال
   createFlowersFromTop();
 }
-function closeOrderModal() { document.getElementById('orderModal').classList.add('hidden'); }
+
+function closeOrderModal() { 
+  document.getElementById('orderModal').classList.add('hidden'); 
+}
 
 // ============== دالة إضافة الطلب المعدلة (مع إضافة حقلي المحافظة والمنطقة) ==============
 async function handleOrderSubmit(e) { 
@@ -904,7 +926,7 @@ async function handleOrderSubmit(e) {
       addNotification('طلب جديد', `تم إضافة طلب جديد للزبون ${customerName} (الكمية: ${qty})`, 'order', result.data.__backendId);
     }
     showToast('✅ تم حفظ الطلب'); 
-  } else showToast('❌ حدث خطأ'); 
+  } else showToast('❌ حدث خطأ: ' + (result.error || 'فشل الحفظ')); 
 }
 
 function editOrderDate(id) { 
