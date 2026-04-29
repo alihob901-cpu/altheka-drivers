@@ -77,8 +77,8 @@ const firebaseConfig = {
 const VAPID_KEY = "BA2ONQejtLqvY0xKKIy0WaG3SAc1CCVm1xqvUhHI1gzxxlqGq65sGei8OroEqAK1haxQygk_2cp8Ugf-jyt3tWA";
 const DEFAULT_AGENT_PROFIT = 1000;
 
-// قائمة المحافظات (مثل نظام الزعيم)
-const GOVERNORATES = ['بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء', 'ذي قار', 'ميسان', 'بابل', 'واسط', 'صلاح الدين', 'ديالى', 'المثنى', 'القادسية'];
+// قائمة المحافظات (كمية احتياطية)
+const FALLBACK_GOVERNORATES = ['بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء', 'ذي قار', 'ميسان', 'بابل', 'واسط', 'صلاح الدين', 'ديالى', 'المثنى', 'القادسية'];
 
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
@@ -137,6 +137,30 @@ function clearLoginState() { localStorage.removeItem('trust_login_state'); }
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => { requestNotificationPermission(); });
+}
+
+// ============== دالة جلب المحافظات من الخادم ==============
+async function loadGovernorates() {
+    const select = document.getElementById('f_governorate');
+    if (!select) return;
+    
+    try {
+        const response = await fetch('/api/governorates');
+        if (response.ok) {
+            const governorates = await response.json();
+            if (governorates && governorates.length > 0) {
+                select.innerHTML = '<option value="">اختر المحافظة</option>' + 
+                    governorates.map(g => `<option value="${g}">${g}</option>`).join('');
+                console.log('✅ تم تحميل المحافظات من الخادم');
+                return;
+            }
+        }
+        throw new Error('فشل جلب المحافظات');
+    } catch (error) {
+        console.log('⚠️ استخدام المحافظات المحلية:', error);
+        select.innerHTML = '<option value="">اختر المحافظة</option>' + 
+            FALLBACK_GOVERNORATES.map(g => `<option value="${g}">${g}</option>`).join('');
+    }
 }
 </script>
 
@@ -293,7 +317,7 @@ if ('serviceWorker' in navigator) {
   <div><label class="block text-sm text-slate-400 mb-1">👤 اسم الزبون</label><input id="f_name" required placeholder="أدخل اسم الزبون" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
   <div><label class="block text-sm text-slate-400 mb-1">📞 رقم الهاتف</label><input id="f_phone" required placeholder="أدخل رقم الهاتف" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
   <div class="grid grid-cols-2 gap-3">
-    <div><label class="block text-sm text-slate-400 mb-1">📍 المحافظة</label><select id="f_governorate" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"><option value="">اختر المحافظة</option>${GOVERNORATES.map(g => `<option value="${g}">${g}</option>`).join('')}</select></div>
+    <div><label class="block text-sm text-slate-400 mb-1">📍 المحافظة</label><select id="f_governorate" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"><option value="">جار التحميل...</option></select></div>
     <div><label class="block text-sm text-slate-400 mb-1">🏘️ المنطقة/الحي</label><input id="f_district" required placeholder="المنطقة أو الحي" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
   </div>
   <div><label class="block text-sm text-slate-400 mb-1">📦 المنتج</label><input id="f_product" required placeholder="اسم المنتج" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
@@ -643,7 +667,15 @@ function renderReports() {
 }
 function exportCSV() { if (!allOrders.length) { showToast('لا توجد بيانات'); return; } const headers = ['الزبون','الهاتف','العنوان','المنتج','الكمية','السعر','الإجمالي','المندوب','التاريخ','الحالة','الملاحظات']; const rows = allOrders.map(o => [o.customer_name, o.customer_phone, o.customer_address, o.product, o.quantity, o.price, o.total, o.agent_name, o.order_date || '', o.status, o.admin_notes || '']); const csv = '\uFEFF' + [headers, ...rows].map(r => r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'orders.csv'; a.click(); showToast('📥 تم التصدير'); }
 
-function showNewOrderModal() { document.getElementById('orderModal').classList.remove('hidden'); document.getElementById('orderForm').reset(); document.getElementById('f_qty').value = '1'; const today = new Date().toISOString().split('T')[0]; document.getElementById('f_date').value = today; createFlowersFromTop(); }
+function showNewOrderModal() { 
+    document.getElementById('orderModal').classList.remove('hidden'); 
+    document.getElementById('orderForm').reset(); 
+    document.getElementById('f_qty').value = '1'; 
+    const today = new Date().toISOString().split('T')[0]; 
+    document.getElementById('f_date').value = today; 
+    loadGovernorates(); // تحميل المحافظات عند فتح النموذج
+    createFlowersFromTop(); 
+}
 function closeOrderModal() { document.getElementById('orderModal').classList.add('hidden'); }
 
 async function handleOrderSubmit(e) { 
@@ -697,7 +729,7 @@ async function handleOrderSubmit(e) {
     closeOrderModal(); 
     if (currentUser && (!isAgentMode || (isAgentMode && currentUser.type !== 'admin'))) addNotification('طلب جديد', `تم إضافة طلب جديد للزبون ${customerName}`, 'order', result.data.__backendId);
     showToast('✅ تم حفظ الطلب'); 
-  } else showToast('❌ حدث خطأ'); 
+  } else showToast('❌ حدث خطأ: ' + JSON.stringify(result)); 
 }
 
 function editOrderDate(id) { 
