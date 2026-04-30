@@ -253,7 +253,7 @@ async function syncWithJenni() {
           </button>
         </div>
         <button id="addOrderBtn" onclick="showNewOrderModal()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition hidden"> <i data-lucide="plus" style="width:16px;height:16px"></i> طلب جديد </button>
-        <button id="syncWithJenniBtn" onclick="syncWithJenni()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition">
+        <button id="syncWithJenniBtn" onclick="syncWithJenni()" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition">
           <i data-lucide="refresh-cw" style="width:16px;height:16px"></i> مزامنة مع الزعيم
         </button>
         <button onclick="logout()" class="text-slate-400 hover:text-red-400 p-2 rounded-lg hover:bg-slate-800 transition"> <i data-lucide="log-out" style="width:20px;height:20px"></i> </button>
@@ -293,7 +293,7 @@ async function syncWithJenni() {
         <div class="flex items-center gap-2"><select id="filterStatus" onchange="renderOrders()" class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300"><option value="all">كل الحالات</option><option value="جديد">جديد</option><option value="قيد التوصيل">قيد التوصيل</option><option value="واصل">واصل</option><option value="راجع">راجع</option></select></div>
         <input id="searchOrders" oninput="renderOrders()" type="text" placeholder="بحث بالاسم أو الهاتف..." class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300 w-56">
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th><tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody></table></div></div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody></table></div></div>
     </div>
 
     <!-- Agents Page -->
@@ -353,6 +353,7 @@ async function syncWithJenni() {
     <div><label class="block text-sm text-slate-400 mb-1">📍 المحافظة</label><select id="f_governorate" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"><option value="">جار التحميل...</option></select></div>
     <div><label class="block text-sm text-slate-400 mb-1">🏘️ المنطقة/الحي</label><input id="f_district" required placeholder="المنطقة أو الحي" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
   </div>
+  <div><label class="block text-sm text-slate-400 mb-1">📍 أقرب نقطة دالة</label><input id="f_landmark" placeholder="مدرسة - جامع - محطة - مجمع" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
   <div><label class="block text-sm text-slate-400 mb-1">📦 المنتج</label><input id="f_product" required placeholder="اسم المنتج" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
   <div class="grid grid-cols-2 gap-3"><div><label class="block text-sm text-slate-400 mb-1">🔢 الكمية</label><input id="f_qty" type="number" value="1" placeholder="الكمية" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">💰 السعر (د.ع)</label><input id="f_price" type="number" required placeholder="السعر" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div></div>
   <div><label class="block text-sm text-slate-400 mb-1">📅 التاريخ</label><input id="f_date" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
@@ -595,7 +596,6 @@ function renderOrders() {
     const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().split('T')[0] : ''); const displayDate = orderDate ? orderDate : 'غير محدد';
     const noteText = o.admin_notes || ''; const shortNote = noteText.length > 30 ? noteText.substring(0,30) + '...' : noteText;
     const address = o.customer_address || ''; const shortAddress = address.length > 25 ? address.substring(0,25) + '...' : address;
-    // عرض المنتج مع الكمية والمواد إذا وجدت
     const productDisplay = o.product_info ? `${escapeHtml(o.product_info)}` : `${escapeHtml(o.product)} ×${o.quantity}`;
     return `<tr class="hover:bg-slate-800/50 transition"><td class="px-4 py-3">${i+1}<\/td><td class="px-4 py-3 font-500">${escapeHtml(o.customer_name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(o.customer_phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(o.customer_phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(address)}")' title="انقر لنسخ العنوان">📍 ${shortAddress || '-'}<\/span><\/td><td class="px-4 py-3">${productDisplay}<\/td><td class="px-4 py-3 font-700">${(o.total||0).toLocaleString('ar-IQ')}<\/td><td class="px-4 py-3 font-700 text-amber-400">${(o.profit||0).toLocaleString('ar-IQ')} د.ع<\/td><td class="px-4 py-3 font-500 text-blue-400">${escapeHtml(o.agent_name || 'مندوب')}<\/td><td class="px-4 py-3 font-500 text-slate-300"><span class="cursor-pointer hover:text-amber-400 transition" onclick='editOrderDate("${o.__backendId}")' title="انقر لتعديل التاريخ">📅 ${displayDate}<\/span><\/td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}" ${!isAgentMode ? `style="cursor:pointer" onclick='openStatusModal("${o.__backendId}")'` : ''}>${o.status}<\/span><\/td><td class="px-4 py-3 text-slate-400 max-w-[200px]"><span class="clickable-note" onclick='showFullNote("${escapeHtml(noteText).replace(/"/g, '&quot;')}", "${escapeHtml(o.customer_name)}")' title="انقر لعرض الملاحظة كاملة">${shortNote || '-'}<\/span><\/td><td class="px-4 py-3 flex gap-3">${actionsHtml}<\/td><\/tr>`;
   }).join('');
@@ -721,13 +721,12 @@ async function handleOrderSubmit(e) {
   
   const qty = parseInt(document.getElementById('f_qty').value) || 1; 
   const price = parseFloat(document.getElementById('f_price').value) || 0; 
-  // ✅ السعر ثابت لا يضرب في الكمية
   const total = price;
   const governorate = document.getElementById('f_governorate').value;
   const district = document.getElementById('f_district').value;
-  const fullAddress = `${governorate} - ${district}`;
+  const landmark = document.getElementById('f_landmark').value.trim();
+  const fullAddress = landmark ? `${governorate} - ${district} (قرب: ${landmark})` : `${governorate} - ${district}`;
   const productName = document.getElementById('f_product').value.trim();
-  // ✅ إنشاء حقل المواد مع الكمية
   const productInfo = qty > 1 ? `${productName} ×${qty}` : productName;
   
   let agentName = 'مندوب';
@@ -749,6 +748,7 @@ async function handleOrderSubmit(e) {
     customer_address: fullAddress,
     governorate: governorate,
     district: district,
+    landmark: landmark,
     product: productName,
     product_info: productInfo,
     quantity: qty, 
@@ -839,7 +839,7 @@ function openStatusModal(id) {
   pendingStatusRecord = allOrders.find(o => o.__backendId === id); 
   if (!pendingStatusRecord) { showToast('❌ حدث خطأ'); return; } 
   const statuses = ['جديد', 'قيد التوصيل', 'واصل', 'راجع']; 
-  document.getElementById('statusOptions').innerHTML = statuses.map(s => `<button onclick="changeStatus('${s}')" class="w-full text-right px-4 py-2 rounded-lg hover:bg-slate-800 transition ${pendingStatusRecord.status === s ? 'bg-slate-800 text-amber-400' : ''}">${s}</button>`).join(''); 
+  document.getElementById('statusOptions').innerHTML = statuses.map(s => `<button onclick="changeStatus('${s}')" class="w-full text-right px-4 py-2 rounded-lg hover:bg-slate-800 transition ${pendingStatusRecord.status === s ? 'bg-amber-500/20 text-amber-400' : ''}">${s}</button>`).join('');
   document.getElementById('statusModal').classList.remove('hidden'); 
 }
 function closeStatusModal() { document.getElementById('statusModal').classList.add('hidden'); pendingStatusRecord = null; }

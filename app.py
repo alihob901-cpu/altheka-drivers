@@ -178,12 +178,13 @@ def create_shipment_in_jenni(order_data):
             "governorate_code": governorate_code,
             "city": governorate_name,
             "address": order_data.get("customer_address", "عنوان غير محدد")[:100],
+            "landmark": order_data.get("landmark", "")[:100],  # ✅ إضافة معلم (landmark)
             "amount_iqd": float(order_data.get("total", 0)),
             "amount_collect_iqd": float(order_data.get("total", 0)),
             "quantity": quantity,
             "weight": 0.5,
             "content_type": "parcel",
-            "product_info": product_info[:200],  # ✅ إضافة المواد
+            "product_info": product_info[:200],
             "note": order_data.get("admin_notes", "")[:200],
             "is_fragile": False,
             "is_express": False
@@ -487,7 +488,7 @@ def add_data():
         
         print(f"📝 إضافة إلى جدول {table_name}: {new_item.get('customer_name', new_item.get('agent_name', 'غير معروف'))}")
         
-        # إزالة الحقول التي قد تسبب مشكلة (مع الاحتفاظ بـ product_info للإرسال إلى الزعيم)
+        # إزالة الحقول التي قد تسبب مشكلة (مع الاحتفاظ بـ product_info, landmark للإرسال إلى الزعيم)
         insert_item = {k: v for k, v in new_item.items() if k not in ['governorate', 'district', 'governorate_code', 'jenni_last_update']}
         
         result = supabase.table(table_name).insert(insert_item).execute()
