@@ -281,6 +281,55 @@ def delete_shipment_from_jenni(shipment_number):
     
     return {"success": False, "error": "فشل جميع محاولات المصادقة"}
 
+# ============== API لتصفير أرباح المندوب (سداد) ==============
+@app.route('/api/settle-agent/<agent_id>', methods=['POST'])
+def settle_agent(agent_id):
+    """تصفير أرباح المندوب (حذف جميع الطلبات الواصلة)"""
+    try:
+        data = request.json
+        paid_amount = data.get('paid_amount', 0)
+        
+        if not supabase:
+            return jsonify({"success": False, "error": "Supabase not connected"}), 500
+        
+        # جلب المندوب
+        agent_result = supabase.table('agents').select('*').eq('__backendId', agent_id).execute()
+        if not agent_result.data:
+            return jsonify({"success": False, "error": "المندوب غير موجود"}), 404
+        
+        agent = agent_result.data[0]
+        agent_name = agent.get('agent_name')
+        
+        # جلب جميع الطلبات الواصلة للمندوب
+        orders_result = supabase.table('orders').select('*').eq('agent_name', agent_name).eq('status', 'واصل').execute()
+        orders = orders_result.data if orders_result.data else []
+        
+        deleted_count = 0
+        for order in orders:
+            # حذف من نظام الزعيم
+            if order.get('__backendId'):
+                delete_shipment_from_jenni(order.get('__backendId'))
+            # حذف من قاعدة البيانات
+            supabase.table('orders').delete().eq('__backendId', order.get('__backendId')).execute()
+            deleted_count += 1
+        
+        # إضافة إشعار
+        add_notification_to_db(
+            'سداد أرباح',
+            f'تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name} وتم حذف {deleted_count} طلب',
+            'settlement'
+        )
+        
+        return jsonify({
+            "success": True,
+            "message": f"تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name}",
+            "deleted_orders": deleted_count
+        })
+        
+    except Exception as e:
+        print(f"❌ خطأ في تسديد أرباح المندوب: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 # ============== مزامنة الحذف مع نظام الزعيم (Polling) ==============
 def sync_deleted_shipments():
     """مزامنة الطلبات المحذوفة من نظام الزعيم (تحديد الطلبات التي تم حذفها من الزعيم وحذفها محلياً)"""

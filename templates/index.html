@@ -192,6 +192,62 @@ async function syncWithJenni() {
         showToast('❌ حدث خطأ أثناء المزامنة');
     }
 }
+
+// ============== دالة تصفير أرباح المندوب ==============
+let pendingAgentForSettlement = null;
+
+function openSettleAgentModal(agentId) {
+    const agent = allAgents.find(a => a.__backendId === agentId);
+    if (!agent) return;
+    pendingAgentForSettlement = agent;
+    document.getElementById('settleAgentName').textContent = agent.agent_name;
+    document.getElementById('settleAgentProfit').value = '';
+    document.getElementById('settleAgentModal').classList.remove('hidden');
+}
+
+function closeSettleAgentModal() {
+    document.getElementById('settleAgentModal').classList.add('hidden');
+    pendingAgentForSettlement = null;
+}
+
+async function confirmSettleAgent() {
+    if (!pendingAgentForSettlement) return;
+    
+    const paidAmount = parseFloat(document.getElementById('settleAgentProfit').value) || 0;
+    const agentName = pendingAgentForSettlement.agent_name;
+    
+    // حساب إجمالي أرباح المندوب من الطلبات الواصلة
+    const agentOrders = allOrders.filter(o => o.agent_name === agentName && o.status === 'واصل');
+    const totalProfit = agentOrders.reduce((sum, o) => sum + (o.profit || 0), 0);
+    
+    if (paidAmount <= 0) {
+        showToast('❌ الرجاء إدخال مبلغ السداد');
+        return;
+    }
+    
+    if (paidAmount > totalProfit) {
+        showToast('⚠️ المبلغ المدخل أكبر من إجمالي أرباح المندوب');
+        return;
+    }
+    
+    if (confirm(`هل أنت متأكد من تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}؟`)) {
+        // تصفير أرباح المندوب (حذف جميع الطلبات الواصلة)
+        let deletedCount = 0;
+        for (const order of agentOrders) {
+            if (order.__backendId) {
+                await deleteFromJenni(order.__backendId);
+                const result = await window.dataSdk.delete(order);
+                if (result.isOk) deletedCount++;
+            }
+        }
+        
+        showToast(`✅ تم تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName} وتم حذف ${deletedCount} طلب`);
+        addNotification('سداد أرباح', `تم تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}`, 'agent');
+        
+        closeSettleAgentModal();
+        setTimeout(() => window.dataSdk.loadData(), 500);
+    }
+}
 </script>
 
 <!-- Login Page -->
@@ -253,7 +309,8 @@ async function syncWithJenni() {
           </button>
         </div>
         <button id="addOrderBtn" onclick="showNewOrderModal()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition hidden"> <i data-lucide="plus" style="width:16px;height:16px"></i> طلب جديد </button>
-        <button id="syncWithJenniBtn" onclick="syncWithJenni()" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition">
+        <!-- ✅ زر المزامنة مع الزعيم أصبح ظاهراً -->
+        <button id="syncWithJenniBtn" onclick="syncWithJenni()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition">
           <i data-lucide="refresh-cw" style="width:16px;height:16px"></i> مزامنة مع الزعيم
         </button>
         <button onclick="logout()" class="text-slate-400 hover:text-red-400 p-2 rounded-lg hover:bg-slate-800 transition"> <i data-lucide="log-out" style="width:20px;height:20px"></i> </button>
@@ -280,8 +337,8 @@ async function syncWithJenni() {
         <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><span class="text-xs text-slate-500">قيد التوصيل</span><p id="agentStatPending" class="text-2xl font-800 text-amber-400">0</p></div>
         <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><span class="text-xs text-slate-500">الراجعة</span><p id="agentStatReturned" class="text-2xl font-800 text-red-400">0</p></div>
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><p class="text-slate-400 text-sm">إجمالي المبيعات</p><p id="agentStatTotalSales" class="text-2xl font-800 text-emerald-400">0 د.ع</p></div>
+      <!-- ✅ تم إخفاء "إجمالي المبيعات" عن المندوبين -->
+      <div class="grid grid-cols-1 md:grid-cols-1 gap-4 mb-6">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><p class="text-slate-400 text-sm">إجمالي أرباحي</p><p id="agentStatProfit" class="text-2xl font-800 text-amber-400">0 د.ع</p></div>
       </div>
       <div class="bg-slate-900 border border-slate-800 rounded-xl"><div class="p-4 border-b border-slate-800"><h3 class="font-700">طلباتي الأخيرة</h3></div><div id="agentRecentOrdersList" class="divide-y divide-slate-800"></div></div>
@@ -375,6 +432,24 @@ async function syncWithJenni() {
 
 <div id="editProfitModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditProfitModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96"><h3 class="font-700 text-lg mb-4">💰 تعديل الربح</h3><p id="editProfitCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p><input id="editProfitInput" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 mb-4" placeholder="أدخل مبلغ الربح"><div class="flex gap-3"><button onclick="closeEditProfitModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button onclick="confirmEditProfit()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ</button></div></div></div>
 
+<!-- ✅ نافذة سداد الأرباح -->
+<div id="settleAgentModal" class="fixed inset-0 z-50 hidden">
+  <div class="modal-overlay absolute inset-0" onclick="closeSettleAgentModal()"></div>
+  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-emerald-500/30 rounded-2xl p-6 w-96 shadow-2xl">
+    <div class="text-center mb-4">
+      <i data-lucide="wallet" style="width:48px;height:48px;color:#10b981" class="mx-auto mb-3"></i>
+      <h3 class="font-700 text-lg text-emerald-400">💰 سداد أرباح المندوب</h3>
+    </div>
+    <p class="text-sm mb-2 text-slate-400">👤 المندوب: <span id="settleAgentName" class="text-white font-bold">-</span></p>
+    <label class="block text-slate-400 text-sm mb-1">💵 المبلغ المدفوع (د.ع)</label>
+    <input id="settleAgentProfit" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 mb-4" placeholder="أدخل مبلغ السداد">
+    <div class="flex gap-3">
+      <button onclick="closeSettleAgentModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg transition">إلغاء</button>
+      <button onclick="confirmSettleAgent()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 py-2 rounded-lg font-700 transition">تسديد</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="fixed top-4 left-4 z-[100] hidden"><div class="bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm toast-show flex items-center gap-2"><i data-lucide="check-circle" style="width:18px;height:18px"></i> <span id="toastMsg"></span></div></div>
 
 <script>
@@ -453,7 +528,7 @@ function closeNotifications() {
   if (backdrop) backdrop.remove(); if (panel) panel.remove(); notificationPanelOpen = false;
 }
 
-// ============== دالة حذف الطلب من نظام الزعيم ==============
+// ============== دالة حذف الطلب من نظام الزعيم (سريعة) ==============
 async function deleteFromJenni(shipmentNumber) {
   try {
     const response = await fetch(`/api/delete-from-jenni/${shipmentNumber}`, { method: 'DELETE' });
@@ -559,11 +634,10 @@ function updateAgentDashboard() {
   const currentAgentName = (currentUser.agent_name || '').trim();
   const agentOrders = allOrders.filter(o => (o.agent_name || '').trim() === currentAgentName);
   const total = agentOrders.length, delivered = agentOrders.filter(o => o.status === 'واصل').length, pending = agentOrders.filter(o => o.status === 'قيد التوصيل').length, returned = agentOrders.filter(o => o.status === 'راجع').length;
-  const sales = agentOrders.filter(o => o.status === 'واصل').reduce((s, o) => s + (o.total || 0), 0);
   const totalProfit = agentOrders.filter(o => o.status === 'واصل').reduce((s, o) => s + (o.profit || 0), 0);
   document.getElementById('agentStatTotalOrders').textContent = total; document.getElementById('agentStatDelivered').textContent = delivered;
   document.getElementById('agentStatPending').textContent = pending; document.getElementById('agentStatReturned').textContent = returned;
-  document.getElementById('agentStatTotalSales').textContent = sales.toLocaleString('ar-IQ'); document.getElementById('agentStatProfit').textContent = totalProfit.toLocaleString('ar-IQ');
+  document.getElementById('agentStatProfit').textContent = totalProfit.toLocaleString('ar-IQ');
   const recent = [...agentOrders].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8);
   const container = document.getElementById('agentRecentOrdersList');
   if (container) { if (!recent.length) container.innerHTML = '<div class="p-8 text-center text-slate-600">📭 لا توجد طلبات</div>'; else container.innerHTML = recent.map(o => `<div class="flex justify-between px-5 py-4 border-b border-slate-800"><div><p class="font-700">${escapeHtml(o.customer_name)}</p><p class="text-xs text-slate-500">${escapeHtml(o.product)}</p></div><div class="text-right"><p class="text-emerald-400">${(o.total||0).toLocaleString('ar-IQ')} د.ع</p><span class="inline-block px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}">${o.status}</span></div></div>`).join(''); }
@@ -617,7 +691,8 @@ function renderAgents() {
     const sales = agentOrders.filter(o => o.status === 'واصل').reduce((s, o) => s + (o.total || 0), 0);
     const profit = agentOrders.filter(o => o.status === 'واصل').reduce((s, o) => s + (o.profit || 0), 0);
     const agentProfitPerOrder = agent.agent_profit_per_order || DEFAULT_AGENT_PROFIT;
-    return `<div class="bg-slate-900 border border-slate-800 rounded-xl p-5 agent-card hover:border-amber-500/50 transition" onclick='openEditAgentModal("${agent.__backendId}")'><div class="flex justify-between mb-4"><div><p class="font-700 text-amber-400 text-lg">${escapeHtml(agent.agent_name)}</p><p class="text-xs text-slate-500 mt-1">📞 ${escapeHtml(agent.agent_phone)}</p><p class="text-xs text-slate-500">🔑 كود: ${escapeHtml(agent.agent_code)}</p></div><div class="flex gap-2" onclick="event.stopPropagation()"><button onclick='editAgent("${agent.__backendId}")' class="p-1.5 hover:bg-blue-500/20 rounded-lg transition text-blue-400"><i data-lucide="pencil" style="width:16px"><\/i><\/button><button onclick='openDeleteConfirm("${agent.__backendId}", "agent")' class="p-1.5 hover:bg-red-500/20 rounded-lg transition text-red-400"><i data-lucide="trash-2" style="width:16px"><\/i><\/button></div></div><div class="grid grid-cols-3 gap-2 text-center text-xs mt-4"><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-emerald-400 text-lg font-bold">${delivered}</p><p>واصل</p></div><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-red-400 text-lg font-bold">${returned}</p><p>مرتجع</p></div><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-blue-400 text-lg font-bold">${agentOrders.length}</p><p>طلبات</p></div></div><div class="mt-4 pt-3 border-t border-slate-800"><p class="text-sm">💰 المبيعات: <span class="text-emerald-400">${sales.toLocaleString('ar-IQ')} د.ع</span></p><p class="text-sm mt-1">💵 الأرباح: <span class="text-amber-400">${profit.toLocaleString('ar-IQ')} د.ع</span></p><p class="text-sm mt-1">💰 الربح/طلب: <span class="text-blue-400">${agentProfitPerOrder} د.ع</span></p></div><\/div>`;
+    // ✅ إضافة زر سداد الأرباح
+    return `<div class="bg-slate-900 border border-slate-800 rounded-xl p-5 agent-card hover:border-amber-500/50 transition" onclick='openEditAgentModal("${agent.__backendId}")'><div class="flex justify-between mb-4"><div><p class="font-700 text-amber-400 text-lg">${escapeHtml(agent.agent_name)}</p><p class="text-xs text-slate-500 mt-1">📞 ${escapeHtml(agent.agent_phone)}</p><p class="text-xs text-slate-500">🔑 كود: ${escapeHtml(agent.agent_code)}</p></div><div class="flex gap-2" onclick="event.stopPropagation()"><button onclick='editAgent("${agent.__backendId}")' class="p-1.5 hover:bg-blue-500/20 rounded-lg transition text-blue-400"><i data-lucide="pencil" style="width:16px"><\/i><\/button><button onclick='openSettleAgentModal("${agent.__backendId}")' class="p-1.5 hover:bg-emerald-500/20 rounded-lg transition text-emerald-400" title="سداد الأرباح"><i data-lucide="wallet" style="width:16px"><\/i><\/button><button onclick='openDeleteConfirm("${agent.__backendId}", "agent")' class="p-1.5 hover:bg-red-500/20 rounded-lg transition text-red-400"><i data-lucide="trash-2" style="width:16px"><\/i><\/button></div></div><div class="grid grid-cols-3 gap-2 text-center text-xs mt-4"><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-emerald-400 text-lg font-bold">${delivered}</p><p>واصل</p></div><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-red-400 text-lg font-bold">${returned}</p><p>مرتجع</p></div><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-blue-400 text-lg font-bold">${agentOrders.length}</p><p>طلبات</p></div></div><div class="mt-4 pt-3 border-t border-slate-800"><p class="text-sm">💰 المبيعات: <span class="text-emerald-400">${sales.toLocaleString('ar-IQ')} د.ع</span></p><p class="text-sm mt-1">💵 الأرباح: <span class="text-amber-400">${profit.toLocaleString('ar-IQ')} د.ع</span></p><p class="text-sm mt-1">💰 الربح/طلب: <span class="text-blue-400">${agentProfitPerOrder} د.ع</span></p></div><\/div>`;
   }).join('');
   lucide.createIcons();
 }
@@ -828,7 +903,10 @@ function openDeleteConfirm(id, type) {
 function closeDeleteConfirm() { document.getElementById('deleteConfirm').classList.add('hidden'); pendingDeleteRecord = null; }
 async function confirmDelete() { 
   if (!pendingDeleteRecord) return; 
-  if (pendingDeleteRecord.__backendId && pendingDeleteRecord.type !== 'agent') await deleteFromJenni(pendingDeleteRecord.__backendId);
+  // ✅ حذف سريع من نظام الزعيم
+  if (pendingDeleteRecord.__backendId && pendingDeleteRecord.type !== 'agent') {
+    await deleteFromJenni(pendingDeleteRecord.__backendId);
+  }
   const result = await window.dataSdk.delete(pendingDeleteRecord); 
   closeDeleteConfirm(); 
   showToast(result.isOk ? '✅ تم الحذف' : '❌ حدث خطأ'); 
