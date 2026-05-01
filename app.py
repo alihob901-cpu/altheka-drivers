@@ -441,6 +441,168 @@ def sync_deleted_shipments():
     except Exception as e:
         print(f"❌ خطأ في مزامنة الحذف: {e}")
 
+# ============== جلب تحديثات الحالات من نظام الزعيم (Polling) ==============
+def fetch_and_update_order_statuses():
+    """جلب حالات الطلبات من نظام الزعيم وتحديثها محلياً - يتم تشغيلها كل 5 دقائق"""
+    print("🔄 [جلب الحالات] بدء جلب تحديثات الحالات من الزعيم...")
+    
+    if not supabase:
+        print("❌ Supabase غير متصل")
+        return
+
+    try:
+        # جلب الطلبات التي حالتها ليست نهائية
+        pending_orders = supabase.table('orders')\
+            .select('__backendId, jenni_shipment_id, status, customer_name, agent_name')\
+            .in_('status', ['جديد', 'قيد التوصيل', 'تم الارسال', ''])\
+            .execute()
+        
+        if not pending_orders.data:
+            print("✅ لا توجد طلبات بحاجة للتحديث.")
+            return
+
+        token = jenni_get_token()
+        if not token:
+            print("❌ فشل الحصول على التوكن من الزعيم")
+            return
+
+        updated_count = 0
+        status_map = {
+            'DELIVERED': 'واصل',
+            'DELIVERED_PRICE_CHANGED': 'واصل',
+            'PARTIALLY_DELIVERED': 'واصل',
+            'OFD': 'قيد التوصيل',
+            'POSTPONED': 'قيد التوصيل',
+            'POSTPONED_CONFIRMED': 'قيد التوصيل',
+            'RTO_WH': 'راجع',
+            'RTO_WITH_DA': 'راجع',
+            'RTO_CONFIRMED': 'راجع',
+            'CANCELLED': 'ملغي'
+        }
+
+        for order in pending_orders.data:
+            shipment_number = order.get('__backendId')
+            jenni_id = order.get('jenni_shipment_id')
+            
+            if not jenni_id:
+                print(f"⚠️ الطلب {shipment_number} ليس له jenni_shipment_id، تخطي")
+                continue
+                
+            print(f"🔍 جلب حالة الطلب: {shipment_number} - {order.get('customer_name', 'غير معروف')}")
+            
+            try:
+                response = requests.post(
+                    f"{JENNI_API_URL}/v2/shipments/query",
+                    json={"shipment_ids": [int(jenni_id)]},
+                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+                    timeout=15
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    shipments = data.get('shipments', [])
+                    if shipments:
+                        current_step = shipments[0].get('current_step')
+                        new_status = status_map.get(current_step)
+                        
+                        if new_status and new_status != order.get('status'):
+                            print(f"🔄 تحديث الطلب {shipment_number} من {order.get('status')} إلى {new_status}")
+                            
+                            # تحديث قاعدة البيانات
+                            supabase.table('orders').update({
+                                "status": new_status,
+                                "updated_at": datetime.now().isoformat(),
+                                "jenni_last_fetch": datetime.now().isoformat()
+                            }).eq('__backendId', shipment_number).execute()
+                            
+                            updated_count += 1
+                            
+                            # إرسال إشعار للمندوب
+                            agent_name = order.get('agent_name')
+                            if agent_name and agent_name not in ['admin', 'المدير العام']:
+                                if new_status == 'واصل':
+                                    title = "✅ طلب واصل"
+                                    body = f"تم توصيل طلب {order.get('customer_name')} بنجاح"
+                                elif new_status == 'راجع':
+                                    title = "↩️ طلب مرتجع"
+                                    body = f"تم إرجاع طلب {order.get('customer_name')}"
+                                elif new_status == 'ملغي':
+                                    title = "❌ طلب ملغي"
+                                    body = f"تم إلغاء طلب {order.get('customer_name')}"
+                                else:
+                                    title = "تحديث حالة الطلب"
+                                    body = f"تم تغيير حالة طلب {order.get('customer_name')} إلى {new_status}"
+                                
+                                send_notification_to_user(agent_name, title, body, shipment_number)
+                        elif new_status:
+                            print(f"ℹ️ الطلب {shipment_number} حالته {order.get('status')} مطابقة للجديدة ({new_status})")
+                        else:
+                            print(f"⚠️ حالة غير معروفة من الزعيم: {current_step}")
+                elif response.status_code == 401:
+                    print("⚠️ توكن منتهي، محاولة إعادة التسجيل...")
+                    token = jenni_login()
+                    if not token:
+                        break
+                else:
+                    print(f"⚠️ فشل جلب حالة {shipment_number}: {response.status_code}")
+                    
+            except Exception as e:
+                print(f"❌ فشل جلب حالة {shipment_number}: {e}")
+                continue
+                
+        print(f"✅ [جلب الحالات] تم تحديث {updated_count} طلب")
+        if updated_count > 0:
+            add_notification_to_db('تحديث تلقائي', f'تم تحديث {updated_count} طلب من الزعيم', 'status')
+
+    except Exception as e:
+        print(f"❌ خطأ في جلب الحالات: {e}")
+
+# ============== API لاختبار جلب حالة طلب محدد ==============
+@app.route('/api/fetch-order-status/<order_id>', methods=['GET'])
+def fetch_order_status(order_id):
+    """جلب حالة طلب محدد من نظام الزعيم (لأغراض الاختبار)"""
+    try:
+        if not supabase:
+            return jsonify({"success": False, "error": "Supabase not connected"}), 500
+        
+        order_result = supabase.table('orders').select('*').eq('__backendId', order_id).execute()
+        if not order_result.data:
+            return jsonify({"success": False, "error": "Order not found"}), 404
+        
+        order = order_result.data[0]
+        jenni_id = order.get('jenni_shipment_id')
+        
+        if not jenni_id:
+            return jsonify({"success": False, "error": "No jenni_shipment_id found"}), 400
+        
+        token = jenni_get_token()
+        if not token:
+            return jsonify({"success": False, "error": "Failed to get token"}), 500
+        
+        response = requests.post(
+            f"{JENNI_API_URL}/v2/shipments/query",
+            json={"shipment_ids": [int(jenni_id)]},
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            return jsonify({
+                "success": True,
+                "order_id": order_id,
+                "current_local_status": order.get('status'),
+                "jenni_response": response.json()
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": f"Jenni API returned {response.status_code}",
+                "response": response.text
+            }), 500
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 # ============== API للمزامنة اليدوية ==============
 @app.route('/api/sync-with-jenni', methods=['POST'])
 def sync_with_jenni():
@@ -449,6 +611,18 @@ def sync_with_jenni():
         print("🔄 بدء مزامنة يدوية...")
         sync_deleted_shipments()
         return jsonify({"success": True, "message": "تمت المزامنة بنجاح"})
+    except Exception as e:
+        print(f"❌ خطأ في المزامنة: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ============== API لمزامنة جميع الحالات يدوياً ==============
+@app.route('/api/sync-all-statuses', methods=['POST'])
+def sync_all_statuses():
+    """مزامنة جميع حالات الطلبات يدوياً"""
+    try:
+        print("🔄 بدء مزامنة يدوية لجميع الحالات...")
+        fetch_and_update_order_statuses()
+        return jsonify({"success": True, "message": "تمت مزامنة الحالات بنجاح"})
     except Exception as e:
         print(f"❌ خطأ في المزامنة: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -808,10 +982,16 @@ def health_check():
 
 # ============== تشغيل المهام المجدولة ==============
 def start_scheduler():
+    """تشغيل المجدول للمهام الخلفية"""
     scheduler = BackgroundScheduler()
+    # مزامنة الحذف كل ساعة
     scheduler.add_job(func=sync_deleted_shipments, trigger="interval", hours=1, id='sync_deleted_job')
+    # جلب تحديثات الحالات كل 5 دقائق (هذا هو حل مشكلة تحديث الحالات)
+    scheduler.add_job(func=fetch_and_update_order_statuses, trigger="interval", minutes=5, id='fetch_status_job')
     scheduler.start()
-    print("✅ تم تشغيل المجدول - سيتم مزامنة الحذف مع الزعيم كل ساعة")
+    print("✅ تم تشغيل المجدول:")
+    print("   - مزامنة الحذف مع الزعيم: كل ساعة")
+    print("   - جلب تحديثات الحالات: كل 5 دقائق")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
