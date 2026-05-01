@@ -652,7 +652,7 @@ async function handleLogin(e) {
   const btn = document.getElementById('loginBtn'); const errorMsg = document.getElementById('loginError');
   errorMsg.classList.add('hidden'); btn.disabled = true; btn.innerHTML = '<span class="animate-pulse">جاري التحقق...</span>';
   await new Promise(resolve => setTimeout(resolve, 300));
-  if (username === 'admin' && password === 'admin123') {
+  if (username === 'admin' && password === 'ali112233') {
     currentUser = { type: 'admin', agent_name: 'المدير العام' }; isAgentMode = false;
     btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons(); showApp(); saveLoginState(); showToast('مرحباً في لوحة التحكم الإدارية');
     const token = localStorage.getItem('fcm_token');
