@@ -32,7 +32,7 @@
     .status-راجع { background: #7f1d1d; color: #fca5a5; }
     .status-قيد { background: #78350f; color: #fcd34d; }
     .status-جديد { background: #1e3a5f; color: #93c5fd; }
-    .status-تمت-معالجته { background: #1e3a5f; color: #93c5fd; }
+    .status-ملغي { background: #4a044e; color: #d8b4fe; }
     .modal-overlay { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
     .agent-card { cursor: pointer; transition: all 0.2s; }
     .agent-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
@@ -40,8 +40,6 @@
     .animate-fade-in-up { animation: fadeInUp 0.3s ease-out; }
     .flower-top { position: fixed; pointer-events: none; z-index: 9999; font-size: 24px; animation: floatDown 4s ease-out forwards; }
     @keyframes floatDown { 0% { opacity: 1; transform: translateY(-50px) rotate(0deg); } 100% { opacity: 0; transform: translateY(calc(100vh + 100px)) rotate(360deg); } }
-    .balloon { position: fixed; pointer-events: none; z-index: 9998; font-size: 30px; animation: floatUp 4s ease-out forwards; }
-    @keyframes floatUp { 0% { opacity: 1; transform: translateY(calc(100vh + 50px)) rotate(0deg); } 100% { opacity: 0; transform: translateY(-100px) rotate(360deg); } }
     .clickable-note { cursor: pointer; transition: all 0.2s; }
     .clickable-note:hover { color: #60a5fa; text-decoration: underline; }
     .copyable { cursor: pointer; transition: all 0.2s; }
@@ -60,6 +58,7 @@
     .inventory-item:hover { background: rgba(255,255,255,0.05); }
     .inventory-actions { opacity: 0.7; transition: opacity 0.2s; }
     .inventory-item:hover .inventory-actions { opacity: 1; }
+    .status-ملغي { background: #4a044e; color: #d8b4fe; }
   </style>
 </head>
 <body class="h-full bg-slate-950 text-slate-100">
@@ -193,123 +192,6 @@ async function syncWithJenni() {
         showToast('❌ حدث خطأ أثناء المزامنة');
     }
 }
-
-// ============== دالة تصفير أرباح المندوب ==============
-let pendingAgentForSettlement = null;
-
-function openSettleAgentModal(agentId) {
-    const agent = allAgents.find(a => a.__backendId === agentId);
-    if (!agent) return;
-    pendingAgentForSettlement = agent;
-    document.getElementById('settleAgentName').textContent = agent.agent_name;
-    document.getElementById('settleAgentProfit').value = '';
-    document.getElementById('settleAgentModal').classList.remove('hidden');
-}
-
-function closeSettleAgentModal() {
-    document.getElementById('settleAgentModal').classList.add('hidden');
-    pendingAgentForSettlement = null;
-}
-
-async function confirmSettleAgent() {
-    if (!pendingAgentForSettlement) return;
-    
-    const paidAmount = parseFloat(document.getElementById('settleAgentProfit').value) || 0;
-    const agentName = pendingAgentForSettlement.agent_name;
-    
-    // حساب إجمالي أرباح المندوب من الطلبات الواصلة
-    const agentOrders = allOrders.filter(o => o.agent_name === agentName && o.status === 'واصل');
-    const totalProfit = agentOrders.reduce((sum, o) => sum + (o.profit || 0), 0);
-    
-    if (paidAmount <= 0) {
-        showToast('❌ الرجاء إدخال مبلغ السداد');
-        return;
-    }
-    
-    if (paidAmount > totalProfit) {
-        showToast('⚠️ المبلغ المدخل أكبر من إجمالي أرباح المندوب');
-        return;
-    }
-    
-    if (confirm(`هل أنت متأكد من تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}؟`)) {
-        // تصفير أرباح المندوب (حذف جميع الطلبات الواصلة)
-        let deletedCount = 0;
-        for (const order of agentOrders) {
-            if (order.__backendId) {
-                await deleteFromJenni(order.__backendId);
-                const result = await window.dataSdk.delete(order);
-                if (result.isOk) deletedCount++;
-            }
-        }
-        
-        showToast(`✅ تم تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName} وتم حذف ${deletedCount} طلب`);
-        addNotification('سداد أرباح', `تم تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}`, 'agent');
-        
-        closeSettleAgentModal();
-        setTimeout(() => window.dataSdk.loadData(), 500);
-    }
-}
-
-// ============== دالة تعديل حالة الطلب للمندوب (لطلبات "راجع" فقط) ==============
-let pendingAgentStatusRecord = null;
-
-function openAgentStatusModal(id) {
-    if (!isAgentMode) {
-        showToast('🔒 هذه الخاصية متاحة فقط للمندوبين');
-        return;
-    }
-    
-    const order = allOrders.find(o => o.__backendId === id);
-    if (!order) {
-        showToast('❌ حدث خطأ');
-        return;
-    }
-    
-    // التحقق: المندوب يمكنه فقط تعديل الطلبات التي حالته "راجع"
-    if (order.status !== 'راجع') {
-        showToast('⚠️ يمكنك فقط تعديل الطلبات الراجعة (المرتجعة)');
-        return;
-    }
-    
-    pendingAgentStatusRecord = order;
-    document.getElementById('agentStatusCustomer').textContent = order.customer_name;
-    document.getElementById('agentStatusNote').value = order.admin_notes || '';
-    document.getElementById('agentStatusModal').classList.remove('hidden');
-}
-
-function closeAgentStatusModal() {
-    document.getElementById('agentStatusModal').classList.add('hidden');
-    pendingAgentStatusRecord = null;
-}
-
-async function confirmAgentStatusChange() {
-    if (!pendingAgentStatusRecord) return;
-    
-    const newNote = document.getElementById('agentStatusNote').value.trim();
-    const timestamp = new Date().toLocaleString('ar-IQ');
-    const agentName = currentUser?.agent_name || 'مندوب';
-    
-    // إضافة الملاحظة الجديدة إلى الملاحظات القديمة
-    const updatedNote = pendingAgentStatusRecord.admin_notes 
-        ? `${pendingAgentStatusRecord.admin_notes}\n[${timestamp}] ${agentName}: تمت المعالجة - ${newNote}`
-        : `[${timestamp}] ${agentName}: تمت المعالجة - ${newNote}`;
-    
-    // تحديث الحالة إلى "تمت معالجته" وتحديث الملاحظة
-    const result = await window.dataSdk.update({ 
-        ...pendingAgentStatusRecord, 
-        status: 'تمت معالجته',
-        admin_notes: updatedNote
-    });
-    
-    closeAgentStatusModal();
-    
-    if (result.isOk) {
-        addNotification('معالجة طلب', `تمت معالجة الطلب الراجع للزبون ${pendingAgentStatusRecord.customer_name}`, 'status', pendingAgentStatusRecord.__backendId);
-        showToast('✅ تم تحديث حالة الطلب إلى "تمت معالجته"');
-    } else {
-        showToast('❌ حدث خطأ');
-    }
-}
 </script>
 
 <!-- Login Page -->
@@ -407,7 +289,7 @@ async function confirmAgentStatusChange() {
     <!-- Orders Page -->
     <div id="page-orders" class="page-content p-6 fade-in hidden">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <div class="flex items-center gap-2"><select id="filterStatus" onchange="renderOrders()" class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300"><option value="all">كل الحالات</option><option value="جديد">جديد</option><option value="قيد التوصيل">قيد التوصيل</option><option value="واصل">واصل</option><option value="راجع">راجع</option><option value="تمت معالجته">تمت معالجته</option></select></div>
+        <div class="flex items-center gap-2"><select id="filterStatus" onchange="renderOrders()" class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300"><option value="all">كل الحالات</option><option value="جديد">جديد</option><option value="قيد التوصيل">قيد التوصيل</option><option value="واصل">واصل</option><option value="راجع">راجع</option><option value="ملغي">ملغي</option></select></div>
         <input id="searchOrders" oninput="renderOrders()" type="text" placeholder="بحث بالاسم أو الهاتف..." class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300 w-56">
       </div>
       <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody></table></div></div>
@@ -488,46 +370,26 @@ async function confirmAgentStatusChange() {
 
 <div id="deleteConfirm" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeDeleteConfirm()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80 text-center"><i data-lucide="trash-2" style="width:40px;height:40px;color:#ef4444" class="mx-auto mb-3"></i><p id="deleteConfirmText" class="font-700 mb-4">حذف العنصر؟</p><div class="flex gap-3"><button onclick="closeDeleteConfirm()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button id="confirmDeleteBtn" onclick="confirmDelete()" class="flex-1 bg-red-600 hover:bg-red-700 py-2 rounded-lg">حذف</button></div></div></div>
 
-<!-- نافذة تغيير حالة الطلب للمندوب (لطلبات "راجع" فقط) -->
-<div id="agentStatusModal" class="fixed inset-0 z-50 hidden">
-  <div class="modal-overlay absolute inset-0" onclick="closeAgentStatusModal()"></div>
-  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-amber-500/30 rounded-2xl p-6 w-96 shadow-2xl">
-    <div class="text-center mb-4">
-      <i data-lucide="clipboard-check" style="width:48px;height:48px;color:#f59e0b" class="mx-auto mb-3"></i>
-      <h3 class="font-700 text-lg text-amber-400">📋 معالجة طلب مرتجع</h3>
-      <p class="text-slate-400 text-sm mt-1">تغيير حالة الطلب من "راجع" إلى "تمت معالجته"</p>
+<!-- نافذة تغيير حالة الطلب المحسنة -->
+<div id="dynamicStatusModal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeStatusModal()"></div>
+  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-amber-500/30 rounded-2xl p-6 w-96 max-w-full shadow-2xl">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="font-700 text-lg">🔄 تغيير حالة الطلب</h3>
+      <button onclick="closeStatusModal()" class="text-slate-400 hover:text-slate-200">
+        <i data-lucide="x" style="width:20px;height:20px"></i>
+      </button>
     </div>
-    <p class="text-sm mb-2 text-slate-400">👤 الزبون: <span id="agentStatusCustomer" class="text-white font-bold">-</span></p>
-    <label class="block text-slate-400 text-sm mb-1">📝 الملاحظة (توضيح المعالجة)</label>
-    <textarea id="agentStatusNote" rows="3" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 resize-none" placeholder="أضف ملاحظة توضيحية عن كيفية معالجة الطلب..."></textarea>
-    <div class="flex gap-3 mt-4">
-      <button onclick="closeAgentStatusModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg transition">إلغاء</button>
-      <button onclick="confirmAgentStatusChange()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700 transition">تأكيد المعالجة</button>
+    <div id="statusModalContent" class="space-y-2">
+      <!-- سيتم تعبئة الخيارات ديناميكياً -->
     </div>
+    <button onclick="closeStatusModal()" class="w-full mt-4 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-lg transition">
+      إلغاء
+    </button>
   </div>
 </div>
-
-<div id="statusModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeStatusModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80"><p class="font-700 mb-3">🔔 تغيير حالة الطلب</p><div id="statusOptions" class="space-y-2"></div></div></div>
 
 <div id="editProfitModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditProfitModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96"><h3 class="font-700 text-lg mb-4">💰 تعديل الربح</h3><p id="editProfitCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p><input id="editProfitInput" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 mb-4" placeholder="أدخل مبلغ الربح"><div class="flex gap-3"><button onclick="closeEditProfitModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button onclick="confirmEditProfit()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ</button></div></div></div>
-
-<!-- نافذة سداد الأرباح -->
-<div id="settleAgentModal" class="fixed inset-0 z-50 hidden">
-  <div class="modal-overlay absolute inset-0" onclick="closeSettleAgentModal()"></div>
-  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-emerald-500/30 rounded-2xl p-6 w-96 shadow-2xl">
-    <div class="text-center mb-4">
-      <i data-lucide="wallet" style="width:48px;height:48px;color:#10b981" class="mx-auto mb-3"></i>
-      <h3 class="font-700 text-lg text-emerald-400">💰 سداد أرباح المندوب</h3>
-    </div>
-    <p class="text-sm mb-2 text-slate-400">👤 المندوب: <span id="settleAgentName" class="text-white font-bold">-</span></p>
-    <label class="block text-slate-400 text-sm mb-1">💵 المبلغ المدفوع (د.ع)</label>
-    <input id="settleAgentProfit" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 mb-4" placeholder="أدخل مبلغ السداد">
-    <div class="flex gap-3">
-      <button onclick="closeSettleAgentModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg transition">إلغاء</button>
-      <button onclick="confirmSettleAgent()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 py-2 rounded-lg font-700 transition">تسديد</button>
-    </div>
-  </div>
-</div>
 
 <div id="toast" class="fixed top-4 left-4 z-[100] hidden"><div class="bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm toast-show flex items-center gap-2"><i data-lucide="check-circle" style="width:18px;height:18px"></i> <span id="toastMsg"></span></div></div>
 
@@ -607,14 +469,37 @@ function closeNotifications() {
   if (backdrop) backdrop.remove(); if (panel) panel.remove(); notificationPanelOpen = false;
 }
 
-// ============== دالة حذف الطلب من نظام الزعيم (سريعة) ==============
+// ============== دالة حذف/إلغاء الطلب من نظام الزعيم ==============
 async function deleteFromJenni(shipmentNumber) {
   try {
     const response = await fetch(`/api/delete-from-jenni/${shipmentNumber}`, { method: 'DELETE' });
     const result = await response.json();
-    if (result.success) { console.log('✅ تم حذف الشحنة من الزعيم'); return true; }
-    else { console.log('⚠️ فشل حذف الزعيم:', result.error); return false; }
+    if (result.success) { 
+      console.log(`✅ ${result.action === 'deleted' ? 'تم حذف' : 'تم إلغاء'} الشحنة من الزعيم:`, result.message);
+      return true; 
+    }
+    else { console.log('⚠️ فشل معالجة الزعيم:', result.error); return false; }
   } catch (error) { console.error('❌ خطأ:', error); return false; }
+}
+
+// دالة إلغاء الطلب في الزعيم (تحديث الحالة)
+async function cancelInJenni(shipmentNumber, reason) {
+  try {
+    const response = await fetch(`/api/cancel-in-jenni/${shipmentNumber}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason || 'تم إلغاء الطلب' })
+    });
+    const result = await response.json();
+    if (result.success) {
+      console.log('✅ تم إلغاء الطلب في الزعيم:', result.message);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('❌ خطأ في الإلغاء:', error);
+    return false;
+  }
 }
 
 // ============== DATA SDK ==============
@@ -665,7 +550,7 @@ async function handleLogin(e) {
   const btn = document.getElementById('loginBtn'); const errorMsg = document.getElementById('loginError');
   errorMsg.classList.add('hidden'); btn.disabled = true; btn.innerHTML = '<span class="animate-pulse">جاري التحقق...</span>';
   await new Promise(resolve => setTimeout(resolve, 300));
-  if (username === 'admin' && password === 'admin123') {
+  if (username === 'admin' && password === 'ali112233') {
     currentUser = { type: 'admin', agent_name: 'المدير العام' }; isAgentMode = false;
     btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons(); showApp(); saveLoginState(); showToast('مرحباً في لوحة التحكم الإدارية');
     const token = localStorage.getItem('fcm_token');
@@ -747,18 +632,15 @@ function renderOrders() {
     if (!isAgentMode) {
       actionsHtml = `<button onclick='editOrderProfit("${o.__backendId}")' class="text-blue-400 hover:text-blue-300 transition" title="تعديل الربح"><i data-lucide="pencil" style="width:16px"><\/i><\/button><button onclick='editOrderDate("${o.__backendId}")' class="text-purple-400 hover:text-purple-300 transition" title="تعديل التاريخ"><i data-lucide="calendar" style="width:16px"><\/i><\/button><button onclick='openDeleteConfirm("${o.__backendId}", "order")' class="text-red-400 hover:text-red-300 transition" title="حذف"><i data-lucide="trash-2" style="width:16px"><\/i><\/button>`;
     } else {
-      // المندوب: يظهر زر تعديل الملاحظة + زر معالجة الطلب الراجع (يظهر فقط للطلبات الحالة "راجع")
-      const showProcessBtn = (o.status === 'راجع');
       actionsHtml = `<button onclick='editOrderNote("${o.__backendId}")' class="text-green-400 hover:text-green-300 transition" title="تعديل الملاحظة"><i data-lucide="message-circle" style="width:16px"><\/i><\/button>`;
-      if (showProcessBtn) {
-        actionsHtml += `<button onclick='openAgentStatusModal("${o.__backendId}")' class="text-amber-400 hover:text-amber-300 transition" title="معالجة الطلب الراجع"><i data-lucide="clipboard-check" style="width:16px"><\/i><\/button>`;
-      }
     }
     const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().split('T')[0] : ''); const displayDate = orderDate ? orderDate : 'غير محدد';
     const noteText = o.admin_notes || ''; const shortNote = noteText.length > 30 ? noteText.substring(0,30) + '...' : noteText;
     const address = o.customer_address || ''; const shortAddress = address.length > 25 ? address.substring(0,25) + '...' : address;
     const productDisplay = o.product_info ? `${escapeHtml(o.product_info)}` : `${escapeHtml(o.product)} ×${o.quantity}`;
-    return `<tr class="hover:bg-slate-800/50 transition"><td class="px-4 py-3">${i+1}<\/td><td class="px-4 py-3 font-500">${escapeHtml(o.customer_name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(o.customer_phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(o.customer_phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(address)}")' title="انقر لنسخ العنوان">📍 ${shortAddress || '-'}<\/span><\/td><td class="px-4 py-3">${productDisplay}<\/td><td class="px-4 py-3 font-700">${(o.total||0).toLocaleString('ar-IQ')}<\/td><td class="px-4 py-3 font-700 text-amber-400">${(o.profit||0).toLocaleString('ar-IQ')} د.ع<\/td><td class="px-4 py-3 font-500 text-blue-400">${escapeHtml(o.agent_name || 'مندوب')}<\/td><td class="px-4 py-3 font-500 text-slate-300"><span class="cursor-pointer hover:text-amber-400 transition" onclick='editOrderDate("${o.__backendId}")' title="انقر لتعديل التاريخ">📅 ${displayDate}<\/span><\/td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}">${o.status}<\/span><\/td><td class="px-4 py-3 text-slate-400 max-w-[200px]"><span class="clickable-note" onclick='showFullNote("${escapeHtml(noteText).replace(/"/g, '&quot;')}", "${escapeHtml(o.customer_name)}")' title="انقر لعرض الملاحظة كاملة">${shortNote || '-'}<\/span><\/td><td class="px-4 py-3 flex gap-3">${actionsHtml}<\/td><\/tr>`;
+    // جعل عمود الحالة قابل للنقر مع أيقونة
+    let statusClass = `status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}`;
+    return `<tr class="hover:bg-slate-800/50 transition"><td class="px-4 py-3">${i+1}<\/td><td class="px-4 py-3 font-500">${escapeHtml(o.customer_name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(o.customer_phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(o.customer_phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(address)}")' title="انقر لنسخ العنوان">📍 ${shortAddress || '-'}<\/span><\/td><td class="px-4 py-3">${productDisplay}<\/td><td class="px-4 py-3 font-700">${(o.total||0).toLocaleString('ar-IQ')}<\/td><td class="px-4 py-3 font-700 text-amber-400">${(o.profit||0).toLocaleString('ar-IQ')} د.ع<\/td><td class="px-4 py-3 font-500 text-blue-400">${escapeHtml(o.agent_name || 'مندوب')}<\/td><td class="px-4 py-3 font-500 text-slate-300"><span class="cursor-pointer hover:text-amber-400 transition" onclick='editOrderDate("${o.__backendId}")' title="انقر لتعديل التاريخ">📅 ${displayDate}<\/span><\/td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs ${statusClass} cursor-pointer hover:opacity-80 transition" onclick='openStatusModal("${o.__backendId}")' title="انقر لتغيير الحالة">${o.status}<\/span><\/td><td class="px-4 py-3 text-slate-400 max-w-[200px]"><span class="clickable-note" onclick='showFullNote("${escapeHtml(noteText).replace(/"/g, '&quot;')}", "${escapeHtml(o.customer_name)}")' title="انقر لعرض الملاحظة كاملة">${shortNote || '-'}<\/span><\/td><td class="px-4 py-3 flex gap-3">${actionsHtml}<\/td><\/tr>`;
   }).join('');
   lucide.createIcons();
 }
@@ -778,7 +660,7 @@ function renderAgents() {
     const sales = agentOrders.filter(o => o.status === 'واصل').reduce((s, o) => s + (o.total || 0), 0);
     const profit = agentOrders.filter(o => o.status === 'واصل').reduce((s, o) => s + (o.profit || 0), 0);
     const agentProfitPerOrder = agent.agent_profit_per_order || DEFAULT_AGENT_PROFIT;
-    return `<div class="bg-slate-900 border border-slate-800 rounded-xl p-5 agent-card hover:border-amber-500/50 transition" onclick='openEditAgentModal("${agent.__backendId}")'><div class="flex justify-between mb-4"><div><p class="font-700 text-amber-400 text-lg">${escapeHtml(agent.agent_name)}</p><p class="text-xs text-slate-500 mt-1">📞 ${escapeHtml(agent.agent_phone)}</p><p class="text-xs text-slate-500">🔑 كود: ${escapeHtml(agent.agent_code)}</p></div><div class="flex gap-2" onclick="event.stopPropagation()"><button onclick='editAgent("${agent.__backendId}")' class="p-1.5 hover:bg-blue-500/20 rounded-lg transition text-blue-400"><i data-lucide="pencil" style="width:16px"><\/i><\/button><button onclick='openSettleAgentModal("${agent.__backendId}")' class="p-1.5 hover:bg-emerald-500/20 rounded-lg transition text-emerald-400" title="سداد الأرباح"><i data-lucide="wallet" style="width:16px"><\/i><\/button><button onclick='openDeleteConfirm("${agent.__backendId}", "agent")' class="p-1.5 hover:bg-red-500/20 rounded-lg transition text-red-400"><i data-lucide="trash-2" style="width:16px"><\/i><\/button></div></div><div class="grid grid-cols-3 gap-2 text-center text-xs mt-4"><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-emerald-400 text-lg font-bold">${delivered}</p><p>واصل</p></div><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-red-400 text-lg font-bold">${returned}</p><p>مرتجع</p></div><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-blue-400 text-lg font-bold">${agentOrders.length}</p><p>طلبات</p></div></div><div class="mt-4 pt-3 border-t border-slate-800"><p class="text-sm">💰 المبيعات: <span class="text-emerald-400">${sales.toLocaleString('ar-IQ')} د.ع</span></p><p class="text-sm mt-1">💵 الأرباح: <span class="text-amber-400">${profit.toLocaleString('ar-IQ')} د.ع</span></p><p class="text-sm mt-1">💰 الربح/طلب: <span class="text-blue-400">${agentProfitPerOrder} د.ع</span></p></div><\/div>`;
+    return `<div class="bg-slate-900 border border-slate-800 rounded-xl p-5 agent-card hover:border-amber-500/50 transition" onclick='openEditAgentModal("${agent.__backendId}")'><div class="flex justify-between mb-4"><div><p class="font-700 text-amber-400 text-lg">${escapeHtml(agent.agent_name)}</p><p class="text-xs text-slate-500 mt-1">📞 ${escapeHtml(agent.agent_phone)}</p><p class="text-xs text-slate-500">🔑 كود: ${escapeHtml(agent.agent_code)}</p></div><div class="flex gap-2" onclick="event.stopPropagation()"><button onclick='editAgent("${agent.__backendId}")' class="p-1.5 hover:bg-blue-500/20 rounded-lg transition text-blue-400"><i data-lucide="pencil" style="width:16px"><\/i><\/button><button onclick='openDeleteConfirm("${agent.__backendId}", "agent")' class="p-1.5 hover:bg-red-500/20 rounded-lg transition text-red-400"><i data-lucide="trash-2" style="width:16px"><\/i><\/button></div></div><div class="grid grid-cols-3 gap-2 text-center text-xs mt-4"><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-emerald-400 text-lg font-bold">${delivered}</p><p>واصل</p></div><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-red-400 text-lg font-bold">${returned}</p><p>مرتجع</p></div><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-blue-400 text-lg font-bold">${agentOrders.length}</p><p>طلبات</p></div></div><div class="mt-4 pt-3 border-t border-slate-800"><p class="text-sm">💰 المبيعات: <span class="text-emerald-400">${sales.toLocaleString('ar-IQ')} د.ع</span></p><p class="text-sm mt-1">💵 الأرباح: <span class="text-amber-400">${profit.toLocaleString('ar-IQ')} د.ع</span></p><p class="text-sm mt-1">💰 الربح/طلب: <span class="text-blue-400">${agentProfitPerOrder} د.ع</span></p></div><\/div>`;
   }).join('');
   lucide.createIcons();
 }
@@ -803,7 +685,7 @@ function renderCustomers() {
   allOrders.forEach(o => { const key = o.customer_phone; if (!customers[key]) customers[key] = { name: o.customer_name, phone: o.customer_phone, address: o.customer_address, orders: 0, total: 0 }; customers[key].orders++; if (o.status === 'واصل') customers[key].total += (o.total || 0); });
   const el = document.getElementById('customersDetail'); if (!el) return; const keys = Object.keys(customers);
   if (!keys.length) { el.innerHTML = '<div class="text-center text-slate-600 p-8">👥 لا يوجد عملاء</div>'; return; }
-  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
+  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th><tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
 }
 
 function renderInventory() {
@@ -989,30 +871,125 @@ function openDeleteConfirm(id, type) {
 function closeDeleteConfirm() { document.getElementById('deleteConfirm').classList.add('hidden'); pendingDeleteRecord = null; }
 async function confirmDelete() { 
   if (!pendingDeleteRecord) return; 
-  // حذف سريع من نظام الزعيم
-  if (pendingDeleteRecord.__backendId && pendingDeleteRecord.type !== 'agent') {
-    await deleteFromJenni(pendingDeleteRecord.__backendId);
+  const deleteBtn = document.getElementById('confirmDeleteBtn');
+  if (deleteBtn) { deleteBtn.textContent = 'جاري...'; deleteBtn.disabled = true; }
+  
+  try {
+    if (pendingDeleteRecord.__backendId && pendingDeleteRecord.type !== 'agent') {
+      showToast('🔄 جاري معالجة الطلب في الزعيم...');
+      await deleteFromJenni(pendingDeleteRecord.__backendId);
+    }
+    const result = await window.dataSdk.delete(pendingDeleteRecord); 
+    closeDeleteConfirm(); 
+    showToast(result.isOk ? '✅ تم الحذف' : '❌ حدث خطأ'); 
+  } catch (error) {
+    showToast('❌ حدث خطأ');
+  } finally {
+    if (deleteBtn) { deleteBtn.textContent = 'حذف'; deleteBtn.disabled = false; }
   }
-  const result = await window.dataSdk.delete(pendingDeleteRecord); 
-  closeDeleteConfirm(); 
-  showToast(result.isOk ? '✅ تم الحذف' : '❌ حدث خطأ'); 
 }
 
+// ============== دوال تغيير الحالة المحسنة ==============
 function openStatusModal(id) { 
-  if (isAgentMode) { showToast('🔒 غير مسموح للمندوبين'); return; } 
-  pendingStatusRecord = allOrders.find(o => o.__backendId === id); 
-  if (!pendingStatusRecord) { showToast('❌ حدث خطأ'); return; } 
-  const statuses = ['جديد', 'قيد التوصيل', 'واصل', 'راجع', 'تمت معالجته']; 
-  document.getElementById('statusOptions').innerHTML = statuses.map(s => `<button onclick="changeStatus('${s}')" class="w-full text-right px-4 py-2 rounded-lg hover:bg-slate-800 transition ${pendingStatusRecord.status === s ? 'bg-amber-500/20 text-amber-400' : ''}">${s}</button>`).join('');
-  document.getElementById('statusModal').classList.remove('hidden'); 
+  const order = allOrders.find(o => o.__backendId === id); 
+  if (!order) { showToast('❌ حدث خطأ'); return; }
+  pendingStatusRecord = order;
+  
+  // تحديد الخيارات المتاحة حسب نوع المستخدم
+  let statuses = [];
+  
+  if (isAgentMode && currentUser && currentUser.type !== 'admin') {
+    // المندوب: فقط قيد التوصيل، راجع، ملغي (بدون واصل)
+    statuses = ['قيد التوصيل', 'راجع', 'ملغي'];
+  } else {
+    // المدير: جميع الحالات
+    statuses = ['جديد', 'قيد التوصيل', 'واصل', 'راجع', 'ملغي'];
+  }
+  
+  // إنشاء أزرار الحالات
+  const statusOptionsHtml = statuses.map(s => `
+    <button onclick="changeStatus('${s}')" 
+            class="w-full text-right px-4 py-3 rounded-lg hover:bg-slate-800 transition mb-2 
+                   ${pendingStatusRecord.status === s ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50' : 'bg-slate-800/50'}"
+            style="font-size: 16px;">
+        <div class="flex justify-between items-center">
+            <span>${s === 'قيد التوصيل' ? '🚚 ' + s : s === 'واصل' ? '✅ ' + s : s === 'راجع' ? '↩️ ' + s : s === 'ملغي' ? '❌ ' + s : '📋 ' + s}</span>
+            ${pendingStatusRecord.status === s ? '<i data-lucide="check" style="width:18px;height:18px"></i>' : ''}
+        </div>
+    </button>
+  `).join('');
+  
+  const modalContent = `
+    <div class="mb-4 p-3 bg-slate-800/50 rounded-lg">
+        <p class="text-slate-400 text-sm">👤 الزبون</p>
+        <p class="font-bold text-white">${escapeHtml(order.customer_name)}</p>
+        <p class="text-slate-400 text-sm mt-2">📦 المنتج</p>
+        <p class="text-white">${escapeHtml(order.product_info || order.product)}</p>
+        <p class="text-slate-400 text-sm mt-2">💰 المبلغ</p>
+        <p class="text-emerald-400">${(order.total || 0).toLocaleString('ar-IQ')} د.ع</p>
+        <p class="text-slate-400 text-sm mt-2">📌 الحالة الحالية</p>
+        <p class="text-amber-400">${order.status}</p>
+    </div>
+    <div class="space-y-2">
+        ${statusOptionsHtml}
+    </div>
+  `;
+  
+  document.getElementById('statusModalContent').innerHTML = modalContent;
+  document.getElementById('dynamicStatusModal').classList.remove('hidden');
+  lucide.createIcons();
 }
-function closeStatusModal() { document.getElementById('statusModal').classList.add('hidden'); pendingStatusRecord = null; }
+
+function closeStatusModal() { 
+  document.getElementById('dynamicStatusModal').classList.add('hidden'); 
+  pendingStatusRecord = null; 
+}
+
 async function changeStatus(newStatus) { 
-  if (!pendingStatusRecord) { showToast('❌ حدث خطأ'); closeStatusModal(); return; } 
-  const result = await window.dataSdk.update({ ...pendingStatusRecord, status: newStatus }); 
-  closeStatusModal(); 
-  if (!isAgentMode && currentUser && pendingStatusRecord) addNotification('تغيير حالة', `تم تغيير حالة طلب ${pendingStatusRecord.customer_name} إلى ${newStatus}`, 'status', pendingStatusRecord.__backendId);
-  showToast(result.isOk ? `✅ تم التغيير إلى ${newStatus}` : '❌ حدث خطأ'); 
+  if (!pendingStatusRecord) { 
+    showToast('❌ حدث خطأ'); 
+    closeStatusModal(); 
+    return; 
+  }
+  
+  const order = pendingStatusRecord;
+  const oldStatus = order.status;
+  
+  if (oldStatus === newStatus) {
+    closeStatusModal();
+    return;
+  }
+  
+  showToast(`🔄 جاري تغيير الحالة إلى ${newStatus}...`);
+  
+  try {
+    // إذا كان التغيير إلى "ملغي"، نحتاج إلغاء الطلب في نظام الزعيم أولاً
+    if (newStatus === 'ملغي' && order.__backendId) {
+      console.log(`📝 محاولة إلغاء الطلب ${order.__backendId} في نظام الزعيم...`);
+      const cancelSuccess = await cancelInJenni(order.__backendId, `تم إلغاء الطلب من قبل ${isAgentMode ? 'المندوب' : 'المدير'}`);
+      if (cancelSuccess) {
+        showToast('✅ تم إلغاء الطلب في نظام الزعيم');
+      } else {
+        showToast('⚠️ تم تغيير الحالة محلياً فقط (فشل الاتصال بالزعيم)');
+      }
+    }
+    
+    // تحديث الحالة في قاعدة البيانات المحلية
+    const result = await window.dataSdk.update({ ...order, status: newStatus }); 
+    closeStatusModal(); 
+    
+    if (result.isOk) {
+      showToast(`✅ تم تغيير الحالة من ${oldStatus} إلى ${newStatus}`);
+      addNotification('تغيير حالة', `تم تغيير حالة طلب ${order.customer_name} من ${oldStatus} إلى ${newStatus}`, 'status', order.__backendId);
+      setTimeout(() => { if (window.dataSdk && window.dataSdk.loadData) window.dataSdk.loadData(); }, 500);
+    } else {
+      showToast('❌ حدث خطأ في تحديث الحالة');
+    }
+  } catch (error) {
+    console.error('خطأ في تغيير الحالة:', error);
+    showToast('❌ حدث خطأ أثناء تغيير الحالة');
+    closeStatusModal();
+  }
 }
 
 function editOrderProfit(id) { 
@@ -1053,6 +1030,19 @@ if (loadLoginState()) {
 
 loadNotificationsFromStorage();
 lucide.createIcons();
+
+// ============== مزامنة تلقائية كل ساعة ==============
+async function syncCancelledFromJenni() {
+    try {
+        const response = await fetch('/api/sync-cancelled-from-jenni', { method: 'POST' });
+        const result = await response.json();
+        if (result.success && result.updated_count > 0) {
+            console.log(`🔄 تم مزامنة ${result.updated_count} طلب ملغي من الزعيم`);
+            if (window.dataSdk && window.dataSdk.loadData) window.dataSdk.loadData();
+        }
+    } catch (error) { console.error('خطأ في مزامنة الطلبات الملغية:', error); }
+}
+setInterval(syncCancelledFromJenni, 60 * 60 * 1000);
 </script>
 </body>
 </html>
