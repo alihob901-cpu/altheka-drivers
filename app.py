@@ -665,15 +665,37 @@ def api_delete_from_jenni(shipment_number):
     result = delete_or_cancel_shipment_in_jenni(shipment_number)
     return jsonify(result)
 
+# ============== Webhook لاستقبال تحديثات الزعيم (المعدل) ==============
 @app.route('/v2/push/update-status', methods=['POST'])
 def jenni_webhook():
+    """استقبال تحديثات الحالة من نظام الزعيم"""
     try:
-        data = request.get_json()
-        print(f"📬 استلام تحديث من الزعيم: {data}")
+        # ✅ التحقق من التوكن
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
         
+        if token != JENNI_WEBHOOK_TOKEN:
+            print(f"⚠️ توكن غير صالح: {token}")
+            return jsonify({"success": False, "message": "Invalid token"}), 401
+        
+        data = request.get_json()
+        print(f"📬 استلام تحديث من نظام الزعيم: {data}")
+        
+        if not data:
+            print("❌ لا توجد بيانات في الطلب")
+            return jsonify({"success": False, "message": "No data"}), 400
+        
+        system_code = data.get('system_code')
         updates = data.get('updates', [])
+        
+        if system_code != JENNI_SYSTEM_CODE:
+            print(f"⚠️ نظام غير صالح: {system_code}")
+            return jsonify({"success": False, "message": "Invalid system code"}), 401
+        
+        # ✅ خريطة تحويل الحالات
         status_map = {
             'DELIVERED': 'واصل',
+            'DELIVERED_PRICE_CHANGED': 'واصل',
             'PARTIALLY_DELIVERED': 'واصل',
             'OFD': 'قيد التوصيل',
             'POSTPONED': 'قيد التوصيل',
@@ -683,22 +705,51 @@ def jenni_webhook():
             'CANCELLED': 'ملغي'
         }
         
+        updated_count = 0
+        
         for update in updates:
             shipment_number = update.get('shipment_number')
             current_step = update.get('current_step')
-            new_status = status_map.get(current_step)
+            current_step_ar = update.get('current_step_ar')
+            note = update.get('note')
+            
+            print(f"📦 تحديث للطلب {shipment_number}: {current_step} - {current_step_ar}")
+            
+            new_status = status_map.get(current_step, None)
             
             if new_status and supabase and shipment_number:
-                supabase.table('orders').update({
+                # ✅ تحديث الطلب في قاعدة البيانات
+                result = supabase.table('orders').update({
                     "status": new_status,
-                    "updated_at": datetime.now().isoformat()
+                    "admin_notes": note if note else None,
+                    "updated_at": datetime.now().isoformat(),
+                    "jenni_last_update": datetime.now().isoformat()
                 }).eq('__backendId', shipment_number).execute()
-                print(f"✅ تم تحديث الطلب {shipment_number} إلى {new_status}")
+                
+                if result.data:
+                    updated_count += 1
+                    print(f"✅ تم تحديث حالة الطلب {shipment_number} إلى {new_status}")
+                    
+                    # ✅ إرسال إشعار للمندوب
+                    order = result.data[0]
+                    agent_name = order.get('agent_name')
+                    if agent_name and agent_name not in ['admin', 'المدير العام']:
+                        customer_name = order.get('customer_name', '')
+                        send_notification_to_user(
+                            agent_name,
+                            f"تحديث حالة الطلب",
+                            f"تم تغيير حالة طلب {customer_name} إلى {new_status}",
+                            shipment_number
+                        )
+            else:
+                print(f"⚠️ لم يتم تحديث الطلب {shipment_number}: الحالة={current_step}, new_status={new_status}")
         
-        return jsonify({"success": True}), 200
+        print(f"✅ تم معالجة {updated_count} تحديث بنجاح")
+        return jsonify({"success": True, "message": f"Processed {updated_count} updates"}), 200
+        
     except Exception as e:
         print(f"❌ خطأ في معالجة Webhook: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/')
 def index():
