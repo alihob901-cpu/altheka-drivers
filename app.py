@@ -264,7 +264,6 @@ def create_shipment_in_jenni(order_data):
     
     print(f"📍 المحافظة المرسلة: {governorate_name} -> {governorate_code}")
     
-    # تجربة صيغ مختلفة للمصادقة
     auth_headers = [
         {"Authorization": f"Bearer {token}"},
         {"Authorization": token},
@@ -478,7 +477,6 @@ def jenni_webhook():
         if system_code != JENNI_SYSTEM_CODE:
             return jsonify({"success": False, "message": "Invalid system code"}), 401
         
-        # خريطة تحويل الحالات من نظام الزعيم إلى حالات التطبيق
         status_map = {
             'DELIVERED': 'واصل',
             'DELIVERED_PRICE_CHANGED': 'واصل',
@@ -504,7 +502,6 @@ def jenni_webhook():
             new_status = status_map.get(current_step, None)
             
             if new_status and supabase and shipment_number:
-                # تحديث حالة الطلب في قاعدة البيانات
                 result = supabase.table('orders').update({
                     "status": new_status,
                     "admin_notes": note if note else None,
@@ -519,7 +516,6 @@ def jenni_webhook():
                     order = result.data[0]
                     agent_name = order.get('agent_name')
                     
-                    # إرسال إشعار للمندوب
                     if agent_name and agent_name not in ['admin', 'المدير العام']:
                         send_notification_to_user(
                             agent_name,
@@ -571,7 +567,6 @@ def send_fcm_notification_via_legacy(fcm_token, title, body, data=None):
         return False
 
 def send_notification_to_user(user_id, title, body, order_id=None):
-    """إرسال إشعار لمستخدم محدد"""
     try:
         if not supabase:
             return False
@@ -583,7 +578,7 @@ def send_notification_to_user(user_id, title, body, order_id=None):
         data = {'order_id': str(order_id)} if order_id else {}
         return send_fcm_notification_via_admin(fcm_token, title, body, data)
     except Exception as e:
-        print(f"❌ خطأ في إرسال الإشعار للمستخدم: {e}")
+        print(f"❌ خطأ في إرسال الإشعار: {e}")
         return False
 
 def get_all_data():
