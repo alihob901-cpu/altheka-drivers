@@ -27,6 +27,7 @@ git commit -m "تحديث app.py لدعم Supabase وإضافة requirements.txt
 git push origin main
 
 
+  if (username === 'admin' && password === 'ali112233') {
 
 📋 بيانات تكامل نظام الزعيم (جاهزة للاستخدام):
 الحقل	القيمة
@@ -37,3 +38,4 @@ Base domain (Webhook)	https://altheka-drivers.onrender.com
 Webhook endpoint	https://altheka-drivers.onrender.com/v2/push/update-status
 Static bearer token	TrustCenterSecretKey123
 Mode
+
