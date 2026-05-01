@@ -404,70 +404,29 @@ def sync_deleted_shipments():
     except Exception as e:
         print(f"❌ خطأ في مزامنة الحذف: {e}")
 
-# ============== مزامنة الطلبات الملغية ==============
+# ============== مزامنة الطلبات الملغية (معطلة مؤقتاً) ==============
 def sync_cancelled_from_jenni():
-    """مزامنة الطلبات الملغية من نظام الزعيم"""
-    print("🔄 [مزامنة ملغية] بدء مزامنة الطلبات الملغية...")
-    
-    if not supabase:
-        return
-    
-    try:
-        token = jenni_get_token()
-        if not token:
-            return
-        
-        updated_count = 0
-        
-        # جلب الطلبات قيد التنفيذ
-        response = requests.get(
-            f"{JENNI_API_URL}/v2/orders/in-process",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            shipments = response.json().get('shipments', [])
-            
-            for shipment in shipments:
-                current_step = shipment.get('current_step', '')
-                if current_step in ['RTO_WH', 'RTO_WITH_DA', 'RTO_CONFIRMED', 'CANCELLED']:
-                    shipment_number = shipment.get('shipment_number')
-                    if shipment_number:
-                        result = supabase.table('orders').update({
-                            "status": "ملغي",
-                            "updated_at": datetime.now().isoformat()
-                        }).eq('__backendId', shipment_number).execute()
-                        
-                        if result.data:
-                            updated_count += 1
-                            print(f"📝 تم تحديث الطلب {shipment_number} إلى 'ملغي'")
-        
-        if updated_count > 0:
-            print(f"✅ تم مزامنة {updated_count} طلب ملغي")
-            
-    except Exception as e:
-        print(f"❌ خطأ في مزامنة الطلبات الملغية: {e}")
+    """مزامنة الطلبات الملغية من نظام الزعيم - معطلة مؤقتاً"""
+    print("⚠️ [مزامنة ملغية] ميزة مزامنة الطلبات الملغية معطلة مؤقتاً")
+    return  # ★★★ الميزة معطلة مؤقتاً بسبب مشكلة في API ★★★
 
 # ============== API للمزامنة ==============
 @app.route('/api/sync-with-jenni', methods=['POST'])
 def sync_with_jenni():
     """مزامنة يدوية مع نظام الزعيم"""
     try:
+        print("🔄 بدء مزامنة يدوية...")
+        # فقط مزامنة الحذف، مزامنة الإلغاء معطلة حالياً
         sync_deleted_shipments()
-        sync_cancelled_from_jenni()
-        return jsonify({"success": True, "message": "تمت المزامنة بنجاح"})
+        return jsonify({"success": True, "message": "تمت مزامنة الحذف بنجاح"})
     except Exception as e:
+        print(f"❌ خطأ في المزامنة: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/sync-cancelled-from-jenni', methods=['POST'])
 def api_sync_cancelled_from_jenni():
-    """API لمزامنة الطلبات الملغية"""
-    try:
-        sync_cancelled_from_jenni()
-        return jsonify({"success": True, "message": "تمت المزامنة"})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    """API لمزامنة الطلبات الملغية - معطلة حالياً"""
+    return jsonify({"success": True, "message": "الميزة معطلة مؤقتاً", "updated_count": 0}), 200
 
 # ============== دوال الإشعارات ==============
 def send_fcm_notification_via_admin(fcm_token, title, body, data=None):
@@ -772,9 +731,9 @@ def health_check():
 def start_scheduler():
     scheduler = BackgroundScheduler()
     scheduler.add_job(func=sync_deleted_shipments, trigger="interval", hours=1, id='sync_deleted')
-    scheduler.add_job(func=sync_cancelled_from_jenni, trigger="interval", hours=1, id='sync_cancelled')
+    # scheduler.add_job(func=sync_cancelled_from_jenni, trigger="interval", hours=1, id='sync_cancelled') # معطلة مؤقتاً
     scheduler.start()
-    print("✅ تم تشغيل المجدول")
+    print("✅ تم تشغيل المجدول - سيتم مزامنة الحذف فقط كل ساعة")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
