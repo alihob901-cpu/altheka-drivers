@@ -117,27 +117,28 @@ async function requestNotificationPermission() {
   } catch (error) { console.error('❌ خطأ:', error); }
 }
 
+// ============== إلغاء حفظ الجلسة - كل مرة يحتاج المستخدم تسجيل دخول جديد ==============
 function saveLoginState() {
-    if (currentUser) localStorage.setItem('trust_login_state', JSON.stringify({ user: currentUser, isAgentMode: isAgentMode, timestamp: Date.now() }));
+    // لا نفعل شيئاً - نمنع حفظ الجلسة
+    return;
 }
 function loadLoginState() {
-    const saved = localStorage.getItem('trust_login_state');
-    if (saved) {
-        try {
-            const loginData = JSON.parse(saved);
-            if ((Date.now() - loginData.timestamp) / (1000 * 60 * 60) < 24) {
-                currentUser = loginData.user;
-                isAgentMode = loginData.isAgentMode;
-                return true;
-            } else localStorage.removeItem('trust_login_state');
-        } catch(e) {}
-    }
+    // لا نستعيد أي جلسة سابقة
     return false;
 }
-function clearLoginState() { localStorage.removeItem('trust_login_state'); }
+function clearLoginState() { 
+    localStorage.removeItem('trust_login_state');
+    localStorage.removeItem('fcm_token');
+    sessionStorage.clear();
+}
 
+// عند تحميل الصفحة، نطلب تسجيل الدخول دائماً
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => { requestNotificationPermission(); });
+  window.addEventListener('load', () => { 
+    requestNotificationPermission();
+    // التأكد من عدم وجود جلسة سابقة
+    clearLoginState();
+  });
 }
 
 // ============== دالة جلب المحافظات من الخادم ==============
@@ -297,13 +298,10 @@ async function emergencyLogoutAll() {
                 currentUser = null;
                 isAgentMode = false;
                 clearLoginState();
-                localStorage.removeItem('trust_login_state');
                 document.getElementById('app').classList.add('hidden');
                 document.getElementById('loginPage').classList.remove('hidden');
                 document.getElementById('loginForm').reset();
                 showToast('🔐 تم تسجيل خروج الجميع، الرجاء تسجيل الدخول مجدداً');
-                // إعادة تحميل الصفحة للتأكد من مسح كل شيء
-                setTimeout(() => location.reload(), 2000);
             }, 1500);
         } else {
             showToast('❌ فشل: ' + (result.error || 'خطأ غير معروف'));
@@ -708,28 +706,55 @@ function toggleTodayFilter() {
 
 async function handleLogin(e) {
   e.preventDefault();
+  
+  // مسح أي بيانات قديمة قبل تسجيل الدخول
+  localStorage.removeItem('trust_login_state');
+  sessionStorage.clear();
+  
   const username = document.getElementById('loginUsername').value.trim();
   const password = document.getElementById('loginPassword').value;
   const btn = document.getElementById('loginBtn'); const errorMsg = document.getElementById('loginError');
   errorMsg.classList.add('hidden'); btn.disabled = true; btn.innerHTML = '<span class="animate-pulse">جاري التحقق...</span>';
-  await new Promise(resolve => setTimeout(resolve, 300));
-  if (username === 'admin' && password === '1234321ali123') {
-    currentUser = { type: 'admin', agent_name: 'المدير العام' }; isAgentMode = false;
-    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; if (typeof lucide !== 'undefined') lucide.createIcons(); showApp(); saveLoginState(); showToast('مرحباً في لوحة التحكم الإدارية');
-    const token = localStorage.getItem('fcm_token');
-    if (token) await saveTokenToServer(token);
-    return;
+  
+  try {
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      if (result.user_type === 'admin') {
+        currentUser = { type: 'admin', agent_name: 'المدير العام' };
+        isAgentMode = false;
+      } else {
+        currentUser = { type: 'agent', agent_name: result.agent_name };
+        isAgentMode = true;
+      }
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="log-in"></i> دخول';
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      showApp();
+      showToast(result.message);
+      const token = localStorage.getItem('fcm_token');
+      if (token) await saveTokenToServer(token);
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="log-in"></i> دخول';
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      errorMsg.textContent = '❌ ' + (result.error || 'بيانات دخول غير صحيحة');
+      errorMsg.classList.remove('hidden');
+    }
+  } catch (error) {
+    console.error('خطأ في تسجيل الدخول:', error);
+    btn.disabled = false;
+    btn.innerHTML = '<i data-lucide="log-in"></i> دخول';
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    errorMsg.textContent = '❌ حدث خطأ في الاتصال بالخادم';
+    errorMsg.classList.remove('hidden');
   }
-  const agent = allAgents.find(a => (a.agent_code === username || a.agent_name === username) && a.agent_password === password);
-  if (agent) {
-    currentUser = agent; isAgentMode = true;
-    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; if (typeof lucide !== 'undefined') lucide.createIcons(); showApp(); saveLoginState(); showToast(`مرحباً ${agent.agent_name}`);
-    const token = localStorage.getItem('fcm_token');
-    if (token) await saveTokenToServer(token);
-    return;
-  }
-  btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; if (typeof lucide !== 'undefined') lucide.createIcons();
-  errorMsg.textContent = '❌ بيانات دخول غير صحيحة'; errorMsg.classList.remove('hidden');
 }
 
 function showApp() {
@@ -758,7 +783,15 @@ function showApp() {
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
-function logout() { currentUser = null; isAgentMode = false; clearLoginState(); document.getElementById('app').classList.add('hidden'); document.getElementById('loginPage').classList.remove('hidden'); document.getElementById('loginForm').reset(); showToast('تم تسجيل الخروج'); }
+function logout() { 
+  currentUser = null; 
+  isAgentMode = false; 
+  clearLoginState(); 
+  document.getElementById('app').classList.add('hidden'); 
+  document.getElementById('loginPage').classList.remove('hidden'); 
+  document.getElementById('loginForm').reset(); 
+  showToast('تم تسجيل الخروج'); 
+}
 function switchPage(page) { closeNotifications(); document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden')); const target = document.getElementById('page-' + page); if (target) target.classList.remove('hidden'); document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active')); const activeBtn = document.querySelector(`[data-page="${page}"]`); if (activeBtn) activeBtn.classList.add('active'); const titles = { dashboard: 'لوحة التحكم', 'agent-dashboard': 'لوحتي الخاصة', orders: 'الطلبات', agents: 'المندوبين', customers: 'العملاء', inventory: 'المخزن', reports: 'التقارير', settings: 'الإعدادات' }; document.getElementById('pageTitle').textContent = titles[page] || page; }
 function toggleSidebar() { const sidebar = document.getElementById('sidebar'); sidebar.classList.toggle('hidden'); }
 
@@ -843,14 +876,14 @@ function renderOrders() {
     });
     if (filtered.length === 0 && search === '' && statusFilter === 'all') {
       const container = document.getElementById('ordersTableBody');
-      if (container) container.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات لهذا اليوم</td>*/';
+      if (container) container.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات لهذا اليوم</td></tr>';
       return;
     }
   }
   
   filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const tbody = document.getElementById('ordersTableBody'); if (!tbody) return;
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات</td>*/'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات</td></tr>'; return; }
   tbody.innerHTML = filtered.map((o, i) => {
     let actionsHtml = '';
     if (!isAgentMode) {
@@ -1247,14 +1280,9 @@ function showToast(msg) {
   setTimeout(() => toast.classList.add('hidden'), 2500); 
 }
 
-if (loadLoginState()) {
-    console.log("🔄 استعادة جلسة سابقة");
-    showApp();
-    const token = localStorage.getItem('fcm_token');
-    if (token) saveTokenToServer(token);
-} else {
-    console.log("👋 لا توجد جلسة سابقة");
-}
+// عند تحميل الصفحة، نعرض صفحة تسجيل الدخول فقط ولا نستعيد أي جلسة
+clearLoginState();
+console.log("🔐 تم إلغاء حفظ الجلسات - يرجى تسجيل الدخول");
 
 loadNotificationsFromStorage();
 if (typeof lucide !== 'undefined') lucide.createIcons();
