@@ -306,17 +306,16 @@ def cancel_shipment_in_jenni(shipment_number, reason="تم إلغاء الطلب
     
     return {"success": False, "error": "فشل جميع محاولات الإلغاء"}
 
-# ============== دالة حذف أو إلغاء الطلب من نظام الزعيم ==============
-def delete_or_cancel_shipment_in_jenni(shipment_number, order_data=None):
-    """محاولة حذف الشحنة من نظام الزعيم، وإذا فشلت نقوم بإلغائها"""
-    print(f"🔄 معالجة الطلب {shipment_number} في نظام الزعيم...")
+# ============== دالة حذف الطلب من نظام الزعيم باستخدام shipment_id المخزن ==============
+def delete_shipment_by_id(shipment_id):
+    """حذف شحنة من نظام الزعيم باستخدام shipment_id"""
+    print(f"🗑️ محاولة حذف الطلب بالـ ID: {shipment_id} من نظام الزعيم...")
     
     token = jenni_get_token()
     if not token:
         print("❌ فشل الحصول على التوكن")
         return {"success": False, "error": "فشل المصادقة مع نظام الزعيم"}
     
-    # المحاولة الأولى: محاولة الحذف المباشر
     auth_headers = [
         {"Authorization": f"Bearer {token}"},
         {"Authorization": token}
@@ -324,38 +323,103 @@ def delete_or_cancel_shipment_in_jenni(shipment_number, order_data=None):
     
     for idx, auth_header in enumerate(auth_headers):
         try:
-            print(f"🗑️ محاولة حذف الطلب {shipment_number} (طريقة {idx + 1})...")
             delete_response = requests.delete(
-                f"{JENNI_API_URL}/v2/orders/{shipment_number}",
-                headers={
-                    "Content-Type": "application/json",
-                    **auth_header
-                },
+                f"{JENNI_API_URL}/v2/orders/{shipment_id}",
+                headers={"Content-Type": "application/json", **auth_header},
                 timeout=30
             )
             
             print(f"📡 رد الحذف: {delete_response.status_code}")
             
             if delete_response.status_code == 200:
-                print(f"✅ تم حذف الطلب {shipment_number} من نظام الزعيم")
+                print(f"✅ تم حذف الطلب (ID: {shipment_id}) من نظام الزعيم")
                 return {"success": True, "action": "deleted", "message": "تم حذف الطلب"}
             elif delete_response.status_code == 404:
-                print(f"⚠️ الطلب {shipment_number} غير موجود")
+                print(f"⚠️ الطلب (ID: {shipment_id}) غير موجود في نظام الزعيم")
                 return {"success": True, "action": "not_found", "message": "الطلب غير موجود"}
             elif delete_response.status_code == 401:
-                print(f"⚠️ فشل المصادقة بالطريقة {idx + 1}، نجرب التالية...")
                 continue
             else:
-                print(f"⚠️ فشل الحذف (الرمز {delete_response.status_code})، نحاول الإلغاء...")
-                break
+                return {"success": False, "error": f"فشل الحذف: {delete_response.status_code}"}
         except Exception as e:
-            print(f"⚠️ فشل محاولة الحذف {idx + 1}: {e}")
+            print(f"❌ خطأ: {e}")
             continue
     
-    # المحاولة الثانية: إلغاء الطلب
-    return cancel_shipment_in_jenni(shipment_number, "تم حذف/إلغاء الطلب")
+    return {"success": False, "error": "فشل جميع محاولات المصادقة"}
 
-# ============== API لإلغاء الطلب في الزعيم ==============
+# ============== دالة حذف الطلب من نظام الزعيم باستخدام shipment_number ==============
+def delete_shipment_by_number(shipment_number):
+    """حذف شحنة من نظام الزعيم باستخدام shipment_number (تستدعي shipment_id أولا)"""
+    print(f"🔍 البحث عن shipment_id للطلب {shipment_number}...")
+    
+    # ✅ جلب shipment_id من قاعدة البيانات
+    if not supabase:
+        return {"success": False, "error": "Supabase not connected"}
+    
+    try:
+        order_result = supabase.table('orders').select('jenni_shipment_id').eq('__backendId', shipment_number).execute()
+        
+        if order_result.data and order_result.data[0].get('jenni_shipment_id'):
+            shipment_id = order_result.data[0]['jenni_shipment_id']
+            print(f"✅ تم العثور على shipment_id: {shipment_id}")
+            # ✅ استخدام shipment_id الصحيح للحذف
+            return delete_shipment_by_id(shipment_id)
+        else:
+            print(f"⚠️ لم يتم العثور على shipment_id للطلب {shipment_number}")
+            # إذا لم نجد shipment_id، نحاول إلغاء الطلب
+            return cancel_shipment_in_jenni(shipment_number, "تم حذف/إلغاء الطلب")
+            
+    except Exception as e:
+        print(f"❌ خطأ في جلب shipment_id: {e}")
+        return {"success": False, "error": str(e)}
+
+# ============== دالة حذف أو إلغاء الطلب (الواجهة الرئيسية) ==============
+def delete_or_cancel_shipment_in_jenni(shipment_number, order_data=None):
+    """حذف أو إلغاء شحنة من نظام الزعيم (يستخدم shipment_id المخزن أولا)"""
+    print(f"🔄 معالجة الطلب {shipment_number} في نظام الزعيم...")
+    
+    # ✅ المحاولة الأولى: استخدام shipment_id المخزن
+    result = delete_shipment_by_number(shipment_number)
+    
+    # إذا نجح الحذف أو الإلغاء، نعيد النتيجة
+    if result.get("success"):
+        return result
+    
+    # ✅ المحاولة الأخيرة: محاولة الحذف المباشر باستخدام رقم الطلب
+    print("🔄 محاولة الحذف المباشر باستخدام رقم الطلب...")
+    
+    token = jenni_get_token()
+    if not token:
+        return {"success": False, "error": "فشل المصادقة مع نظام الزعيم"}
+    
+    auth_headers = [
+        {"Authorization": f"Bearer {token}"},
+        {"Authorization": token}
+    ]
+    
+    for idx, auth_header in enumerate(auth_headers):
+        try:
+            delete_response = requests.delete(
+                f"{JENNI_API_URL}/v2/orders/{shipment_number}",
+                headers={"Content-Type": "application/json", **auth_header},
+                timeout=30
+            )
+            
+            print(f"📡 رد الحذف المباشر: {delete_response.status_code}")
+            
+            if delete_response.status_code == 200:
+                return {"success": True, "action": "deleted", "message": "تم حذف الطلب"}
+            elif delete_response.status_code == 404:
+                return {"success": True, "action": "not_found", "message": "الطلب غير موجود"}
+            elif delete_response.status_code == 401:
+                continue
+        except Exception as e:
+            print(f"❌ خطأ: {e}")
+            continue
+    
+    return {"success": False, "error": "فشل حذف الطلب"}
+
+# ============== API لإلغاء/حذف الطلب في الزعيم ==============
 @app.route('/api/cancel-in-jenni/<shipment_number>', methods=['POST'])
 def api_cancel_in_jenni(shipment_number):
     """API لإلغاء شحنة في نظام الزعيم"""
