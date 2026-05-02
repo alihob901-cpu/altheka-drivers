@@ -27,7 +27,7 @@ git commit -m "تحديث app.py لدعم Supabase وإضافة requirements.txt
 git push origin main
 
 
-  if (username === 'admin' && password === 'ali112233') {
+  if (username === 'admin' && password === '1234321ali123') {
 
 📋 بيانات تكامل نظام الزعيم (جاهزة للاستخدام):
 الحقل	القيمة
