@@ -58,6 +58,8 @@
     .inventory-item:hover .inventory-actions { opacity: 1; }
     .today-btn-active { background-color: #f59e0b; color: #0f172a; }
     .today-btn-inactive { background-color: #1e293b; color: #94a3b8; }
+    .emergency-btn { animation: pulse 1s infinite; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); } 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); } }
   </style>
 </head>
 <body class="h-full bg-slate-950 text-slate-100">
@@ -271,6 +273,43 @@ async function confirmSettleAgent() {
         showToast('❌ حدث خطأ أثناء تسديد الأرباح');
     }
 }
+
+// ============== دالة تسجيل خروج جميع المستخدمين فوراً ==============
+async function emergencyLogoutAll() {
+    if (!confirm('🚨 تحذير أمني! 🚨\n\nهذا الإجراء سيسجل خروج جميع المستخدمين من جميع الأجهزة فوراً!\n\nهل أنت متأكد؟')) {
+        return;
+    }
+    
+    showToast('🔄 جاري تسجيل خروج جميع المستخدمين...');
+    
+    try {
+        const response = await fetch('/api/emergency-logout-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(`✅ تم تسجيل خروج ${result.logged_out_count} مستخدم من جميع الأجهزة`);
+            setTimeout(() => {
+                // مسح الجلسة المحلية وإعادة التوجيه
+                currentUser = null;
+                isAgentMode = false;
+                clearLoginState();
+                document.getElementById('app').classList.add('hidden');
+                document.getElementById('loginPage').classList.remove('hidden');
+                document.getElementById('loginForm').reset();
+                showToast('🔐 تم تسجيل خروج الجميع، الرجاء تسجيل الدخول مجدداً');
+            }, 1500);
+        } else {
+            showToast('❌ فشل: ' + (result.error || 'خطأ غير معروف'));
+        }
+    } catch (error) {
+        console.error('❌ خطأ:', error);
+        showToast('❌ حدث خطأ أثناء تسجيل الخروج');
+    }
+}
 </script>
 
 <!-- Login Page -->
@@ -325,6 +364,10 @@ async function confirmSettleAgent() {
         <h2 id="pageTitle" class="text-lg font-700">لوحة التحكم</h2>
       </div>
       <div class="flex items-center gap-3">
+        <button id="emergencyLogoutBtn" onclick="emergencyLogoutAll()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 shadow-lg emergency-btn">
+          <i data-lucide="alert-triangle" style="width:16px;height:16px"></i>
+          🚨 تسجيل خروج الجميع
+        </button>
         <div class="relative">
           <button id="notificationBtn" onclick="toggleNotifications()" class="relative p-2 rounded-lg hover:bg-slate-800 transition">
             <i data-lucide="bell" style="width:20px;height:20px"></i>
@@ -867,7 +910,7 @@ function renderCustomers() {
   allOrders.forEach(o => { const key = o.customer_phone; if (!customers[key]) customers[key] = { name: o.customer_name, phone: o.customer_phone, address: o.customer_address, orders: 0, total: 0 }; customers[key].orders++; if (o.status === 'واصل') customers[key].total += (o.total || 0); });
   const el = document.getElementById('customersDetail'); if (!el) return; const keys = Object.keys(customers);
   if (!keys.length) { el.innerHTML = '<div class="text-center text-slate-600 p-8">👥 لا يوجد عملاء</div>'; return; }
-  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th><tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
+  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody>不一</div>`;
 }
 
 function renderInventory() {
