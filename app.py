@@ -1,22 +1,19 @@
-﻿from flask import Flask, render_template, request, jsonify, session
+﻿from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from supabase import create_client, Client
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from dotenv import load_dotenv
 import json
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 import time
-import secrets
-import hashlib
 
 # تحميل المتغيرات البيئية
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", secrets.token_hex(32))
-CORS(app, supports_credentials=True)
+CORS(app)
 
 # ============== إعداد Supabase ==============
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://zmzotoutdeeizyfoikfw.supabase.co")
@@ -60,103 +57,18 @@ FCM_SERVER_KEY = os.getenv("FCM_SERVER_KEY", "")
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
     print("✅ تم الاتصال بـ Supabase بنجاح!")
-    
-    # ✅ إنشاء جدول session_tokens إذا لم يكن موجوداً
-    try:
-        # محاولة إنشاء الجدول
-        supabase.table('session_tokens').select('*').limit(1).execute()
-        print("✅ جدول session_tokens موجود")
-    except Exception as e:
-        print(f"⚠️ ملاحظة: {e}")
-        print("سيتم استخدام الجدول عند الحاجة")
-        
 except Exception as e:
     print(f"❌ خطأ في الاتصال بـ Supabase: {e}")
     supabase = None
 
-# ============== قائمة المحافظات ==============
+# ============== قائمة المحافظات (تمت إضافة السليمانية ودهوك) ==============
 GOVERNORATES_LIST = [
     'بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء',
     'ذي قار', 'ميسان', 'بابل', 'واسط', 'صلاح الدين', 'ديالى', 'المثنى', 'القادسية',
     'السليمانية', 'دهوك'
 ]
 
-# ============== دوال إدارة الجلسات ==============
-
-def generate_session_token(user_id, user_type):
-    """إنشاء توكن جلسة فريد للمستخدم"""
-    raw = f"{user_id}_{user_type}_{datetime.now().timestamp()}_{secrets.token_hex(16)}"
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-def save_session_token(user_id, user_type, session_token):
-    """حفظ توكن الجلسة في قاعدة البيانات"""
-    if not supabase:
-        return False
-    try:
-        # التحقق من وجود سجل للمستخدم
-        existing = supabase.table('session_tokens').select('*').eq('user_id', user_id).eq('user_type', user_type).execute()
-        
-        if existing.data:
-            # تحديث التوكن الموجود
-            supabase.table('session_tokens').update({
-                'session_token': session_token,
-                'updated_at': datetime.now().isoformat()
-            }).eq('user_id', user_id).eq('user_type', user_type).execute()
-        else:
-            # إنشاء سجل جديد
-            supabase.table('session_tokens').insert({
-                'user_id': user_id,
-                'user_type': user_type,
-                'session_token': session_token,
-                'created_at': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat()
-            }).execute()
-        return True
-    except Exception as e:
-        print(f"❌ خطأ في حفظ توكن الجلسة: {e}")
-        return False
-
-def get_session_token(user_id, user_type):
-    """الحصول على توكن الجلسة المخزن للمستخدم"""
-    if not supabase:
-        return None
-    try:
-        result = supabase.table('session_tokens').select('session_token').eq('user_id', user_id).eq('user_type', user_type).execute()
-        if result.data:
-            return result.data[0].get('session_token')
-        return None
-    except Exception as e:
-        print(f"❌ خطأ في جلب توكن الجلسة: {e}")
-        return None
-
-def validate_session(user_id, user_type, client_token):
-    """التحقق من صحة الجلسة"""
-    stored_token = get_session_token(user_id, user_type)
-    if not stored_token:
-        return False
-    return stored_token == client_token
-
-def logout_all_sessions(user_id, user_type):
-    """تسجيل الخروج من جميع جلسات المستخدم عن طريق تغيير التوكن"""
-    if not supabase:
-        return False
-    try:
-        new_token = generate_session_token(user_id, user_type)
-        success = save_session_token(user_id, user_type, new_token)
-        
-        # إضافة سجل للتتبع
-        add_notification_to_db(
-            '🔐 تسجيل خروج الكل',
-            f'تم تسجيل الخروج من جميع الأجهزة للمستخدم {user_id}',
-            'security'
-        )
-        
-        return success
-    except Exception as e:
-        print(f"❌ خطأ في تسجيل الخروج من الكل: {e}")
-        return False
-
-# ============== دالة تحويل المحافظات ==============
+# ============== دالة تحويل المحافظات (تمت إضافة السليمانية ودهوك) ==============
 def get_governorate_code(governorate_name):
     """تحويل اسم المحافظة إلى الكود المستخدم في نظام الزعيم"""
     governorate_map = {
@@ -188,75 +100,6 @@ def get_governorate_code(governorate_name):
 def get_governorates():
     """إرجاع قائمة المحافظات للواجهة الأمامية"""
     return jsonify(GOVERNORATES_LIST)
-
-# ============== API لإدارة الجلسات ==============
-
-@app.route('/api/auth/validate-session', methods=['POST'])
-def validate_session_api():
-    """API للتحقق من صحة الجلسة من الواجهة الأمامية"""
-    try:
-        data = request.json
-        user_id = data.get('user_id')
-        user_type = data.get('user_type')
-        session_token = data.get('session_token')
-        
-        if not user_id or not session_token:
-            return jsonify({'valid': False, 'error': 'Missing data'}), 400
-        
-        user_type = user_type or ('admin' if user_id == 'admin' else 'agent')
-        is_valid = validate_session(user_id, user_type, session_token)
-        
-        return jsonify({'valid': is_valid})
-    except Exception as e:
-        print(f"❌ خطأ في التحقق من الجلسة: {e}")
-        return jsonify({'valid': False, 'error': str(e)}), 500
-
-@app.route('/api/auth/logout-all', methods=['POST'])
-def logout_all_api():
-    """API لتسجيل الخروج من جميع الأجهزة"""
-    try:
-        data = request.json
-        user_id = data.get('user_id')
-        user_type = data.get('user_type')
-        
-        if not user_id:
-            return jsonify({'success': False, 'error': 'Missing user_id'}), 400
-        
-        user_type = user_type or ('admin' if user_id == 'admin' else 'agent')
-        success = logout_all_sessions(user_id, user_type)
-        new_token = generate_session_token(user_id, user_type)
-        
-        if success:
-            return jsonify({
-                'success': True, 
-                'message': 'تم تسجيل الخروج من جميع الأجهزة',
-                'new_session_token': new_token
-            })
-        else:
-            return jsonify({'success': False, 'error': 'فشل تسجيل الخروج'}), 500
-    except Exception as e:
-        print(f"❌ خطأ في API تسجيل الخروج: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/auth/save-session', methods=['POST'])
-def save_session_api():
-    """API لحفظ توكن الجلسة بعد تسجيل الدخول"""
-    try:
-        data = request.json
-        user_id = data.get('user_id')
-        user_type = data.get('user_type')
-        session_token = data.get('session_token')
-        
-        if not user_id or not session_token:
-            return jsonify({'success': False, 'error': 'Missing data'}), 400
-        
-        user_type = user_type or ('admin' if user_id == 'admin' else 'agent')
-        success = save_session_token(user_id, user_type, session_token)
-        
-        return jsonify({'success': success})
-    except Exception as e:
-        print(f"❌ خطأ في حفظ الجلسة: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ============== دوال نظام الزعيم ==============
 def jenni_login():
@@ -312,10 +155,12 @@ def create_shipment_in_jenni(order_data):
     governorate_name = order_data.get("governorate", "بغداد")
     governorate_code = get_governorate_code(governorate_name)
     
+    # ✅ معالجة رقم الهاتف - لا يتم استبداله برقم افتراضي أبداً
     phone = order_data.get("customer_phone", "")
     original_phone = phone
     phone = ''.join(filter(str.isdigit, phone))
     
+    # ✅ إذا كان الرقم غير صالح، نحتفظ بالرقم الأصلي ولا نستبدله
     if not phone.startswith('07') or len(phone) not in [10, 11]:
         phone = original_phone
         print(f"⚠️ تحذير: رقم الهاتف غير قياسي ({original_phone})، سيتم إرساله كما هو")
@@ -352,6 +197,7 @@ def create_shipment_in_jenni(order_data):
     
     print(f"📍 المحافظة المرسلة: {governorate_name} -> {governorate_code}")
     
+    # تجربة صيغ مختلفة للمصادقة
     auth_headers = [
         {"Authorization": f"Bearer {token}"},
         {"Authorization": token},
@@ -421,6 +267,7 @@ def cancel_shipment_in_jenni(shipment_number, reason="تم إلغاء الطلب
         }]
     }
     
+    # تجربة صيغ مختلفة للمصادقة
     auth_headers = [
         {"Authorization": f"Bearer {token}"},
         {"Authorization": token},
@@ -459,7 +306,7 @@ def cancel_shipment_in_jenni(shipment_number, reason="تم إلغاء الطلب
     
     return {"success": False, "error": "فشل جميع محاولات الإلغاء"}
 
-# ============== دالة حذف الطلب من نظام الزعيم ==============
+# ============== دالة حذف الطلب من نظام الزعيم باستخدام shipment_id المخزن ==============
 def delete_shipment_by_id(shipment_id):
     """حذف شحنة من نظام الزعيم باستخدام shipment_id"""
     print(f"🗑️ محاولة حذف الطلب بالـ ID: {shipment_id} من نظام الزعيم...")
@@ -500,10 +347,12 @@ def delete_shipment_by_id(shipment_id):
     
     return {"success": False, "error": "فشل جميع محاولات المصادقة"}
 
+# ============== دالة حذف الطلب من نظام الزعيم باستخدام shipment_number ==============
 def delete_shipment_by_number(shipment_number):
-    """حذف شحنة من نظام الزعيم باستخدام shipment_number"""
+    """حذف شحنة من نظام الزعيم باستخدام shipment_number (تستدعي shipment_id أولا)"""
     print(f"🔍 البحث عن shipment_id للطلب {shipment_number}...")
     
+    # ✅ جلب shipment_id من قاعدة البيانات
     if not supabase:
         return {"success": False, "error": "Supabase not connected"}
     
@@ -513,24 +362,30 @@ def delete_shipment_by_number(shipment_number):
         if order_result.data and order_result.data[0].get('jenni_shipment_id'):
             shipment_id = order_result.data[0]['jenni_shipment_id']
             print(f"✅ تم العثور على shipment_id: {shipment_id}")
+            # ✅ استخدام shipment_id الصحيح للحذف
             return delete_shipment_by_id(shipment_id)
         else:
             print(f"⚠️ لم يتم العثور على shipment_id للطلب {shipment_number}")
+            # إذا لم نجد shipment_id، نحاول إلغاء الطلب
             return cancel_shipment_in_jenni(shipment_number, "تم حذف/إلغاء الطلب")
             
     except Exception as e:
         print(f"❌ خطأ في جلب shipment_id: {e}")
         return {"success": False, "error": str(e)}
 
+# ============== دالة حذف أو إلغاء الطلب (الواجهة الرئيسية) ==============
 def delete_or_cancel_shipment_in_jenni(shipment_number, order_data=None):
-    """حذف أو إلغاء شحنة من نظام الزعيم"""
+    """حذف أو إلغاء شحنة من نظام الزعيم (يستخدم shipment_id المخزن أولا)"""
     print(f"🔄 معالجة الطلب {shipment_number} في نظام الزعيم...")
     
+    # ✅ المحاولة الأولى: استخدام shipment_id المخزن
     result = delete_shipment_by_number(shipment_number)
     
+    # إذا نجح الحذف أو الإلغاء، نعيد النتيجة
     if result.get("success"):
         return result
     
+    # ✅ المحاولة الأخيرة: محاولة الحذف المباشر باستخدام رقم الطلب
     print("🔄 محاولة الحذف المباشر باستخدام رقم الطلب...")
     
     token = jenni_get_token()
@@ -640,6 +495,7 @@ def sync_deleted_shipments():
         
         deleted_count = 0
         
+        # جلب جميع الطلبات المحلية
         local_orders = supabase.table('orders').select('__backendId, jenni_shipment_id').execute()
         
         for order in local_orders.data:
@@ -670,6 +526,7 @@ def sync_deleted_shipments():
     except Exception as e:
         print(f"❌ خطأ في مزامنة الحذف: {e}")
 
+# ============== مزامنة الطلبات الملغية (معطلة مؤقتاً) ==============
 def sync_cancelled_from_jenni():
     """مزامنة الطلبات الملغية من نظام الزعيم - معطلة مؤقتاً"""
     print("⚠️ [مزامنة ملغية] ميزة مزامنة الطلبات الملغية معطلة مؤقتاً")
@@ -878,11 +735,12 @@ def api_delete_from_jenni(shipment_number):
     result = delete_or_cancel_shipment_in_jenni(shipment_number)
     return jsonify(result)
 
-# ============== Webhook لاستقبال تحديثات الزعيم ==============
+# ============== Webhook لاستقبال تحديثات الزعيم (المعدل) ==============
 @app.route('/v2/push/update-status', methods=['POST'])
 def jenni_webhook():
     """استقبال تحديثات الحالة من نظام الزعيم"""
     try:
+        # ✅ التحقق من التوكن
         auth_header = request.headers.get('Authorization', '')
         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
         
@@ -904,6 +762,7 @@ def jenni_webhook():
             print(f"⚠️ نظام غير صالح: {system_code}")
             return jsonify({"success": False, "message": "Invalid system code"}), 401
         
+        # ✅ خريطة تحويل الحالات
         status_map = {
             'DELIVERED': 'واصل',
             'DELIVERED_PRICE_CHANGED': 'واصل',
@@ -929,6 +788,7 @@ def jenni_webhook():
             new_status = status_map.get(current_step, None)
             
             if new_status and supabase and shipment_number:
+                # ✅ تحديث الطلب في قاعدة البيانات
                 result = supabase.table('orders').update({
                     "status": new_status,
                     "admin_notes": note if note else None,
@@ -940,6 +800,7 @@ def jenni_webhook():
                     updated_count += 1
                     print(f"✅ تم تحديث حالة الطلب {shipment_number} إلى {new_status}")
                     
+                    # ✅ إرسال إشعار للمندوب
                     order = result.data[0]
                     agent_name = order.get('agent_name')
                     if agent_name and agent_name not in ['admin', 'المدير العام']:
