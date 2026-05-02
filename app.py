@@ -2,7 +2,7 @@
 from flask_cors import CORS
 from supabase import create_client, Client
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import json
 import requests
@@ -23,9 +23,6 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = False  # True في الإنتاج مع HTTPS
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 ساعة
-
-# تخزين الجلسات النشطة
-active_sessions = {}
 
 # ============== إعداد Supabase ==============
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://zmzotoutdeeizyfoikfw.supabase.co")
@@ -73,6 +70,77 @@ except Exception as e:
     print(f"❌ خطأ في الاتصال بـ Supabase: {e}")
     supabase = None
 
+# ============== دوال إدارة الجلسات في Supabase ==============
+
+def create_session_in_db(user_id, session_id, user_type, user_agent, ip_address):
+    """إنشاء جلسة جديدة في قاعدة البيانات"""
+    try:
+        if supabase:
+            expires_at = (datetime.now() + timedelta(hours=24)).isoformat()
+            supabase.table('active_sessions').insert({
+                'user_id': user_id,
+                'session_id': session_id,
+                'user_type': user_type,
+                'user_agent': user_agent[:200] if user_agent else '',
+                'ip_address': ip_address,
+                'created_at': datetime.now().isoformat(),
+                'expires_at': expires_at
+            }).execute()
+            return True
+    except Exception as e:
+        print(f"❌ خطأ في إنشاء الجلسة: {e}")
+    return False
+
+def get_session_from_db(session_id):
+    """الحصول على جلسة من قاعدة البيانات"""
+    try:
+        if supabase:
+            result = supabase.table('active_sessions').select('*').eq('session_id', session_id).execute()
+            if result.data:
+                session_data = result.data[0]
+                # التحقق من صلاحية الجلسة
+                if session_data.get('expires_at') and session_data['expires_at'] > datetime.now().isoformat():
+                    return session_data
+                else:
+                    # حذف الجلسة منتهية الصلاحية
+                    supabase.table('active_sessions').delete().eq('session_id', session_id).execute()
+    except Exception as e:
+        print(f"❌ خطأ في جلب الجلسة: {e}")
+    return None
+
+def delete_session_from_db(session_id):
+    """حذف جلسة من قاعدة البيانات"""
+    try:
+        if supabase and session_id:
+            supabase.table('active_sessions').delete().eq('session_id', session_id).execute()
+            return True
+    except Exception as e:
+        print(f"❌ خطأ في حذف الجلسة: {e}")
+    return False
+
+def delete_all_sessions_from_db(user_id=None):
+    """حذف جميع الجلسات من قاعدة البيانات"""
+    try:
+        if supabase:
+            if user_id:
+                supabase.table('active_sessions').delete().eq('user_id', user_id).execute()
+            else:
+                supabase.table('active_sessions').delete().neq('id', '0').execute()
+            return True
+    except Exception as e:
+        print(f"❌ خطأ في حذف جميع الجلسات: {e}")
+    return False
+
+def get_active_sessions_count():
+    """الحصول على عدد الجلسات النشطة"""
+    try:
+        if supabase:
+            result = supabase.table('active_sessions').select('*', count='exact').execute()
+            return result.count or 0
+    except Exception as e:
+        print(f"❌ خطأ: {e}")
+    return 0
+
 # ============== قائمة المحافظات ==============
 GOVERNORATES_LIST = [
     'بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء',
@@ -112,28 +180,6 @@ def get_governorates():
 
 # ============== دوال الأمان والجلسات ==============
 
-def invalidate_all_sessions():
-    """إبطال جميع الجلسات النشطة"""
-    global active_sessions
-    active_sessions.clear()
-    print("✅ تم إبطال جميع الجلسات النشطة")
-
-def session_required(f):
-    """Decorator للتحقق من صحة الجلسة"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        session_id = request.cookies.get('session_id')
-        user_id = session.get('user_id')
-        
-        if not session_id or not user_id:
-            return jsonify({"error": "غير مصرح به", "code": "UNAUTHORIZED"}), 401
-        
-        if user_id not in active_sessions or session_id not in active_sessions.get(user_id, []):
-            return jsonify({"error": "تم تسجيل الخروج من جميع الأجهزة", "code": "SESSION_INVALIDATED"}), 401
-        
-        return f(*args, **kwargs)
-    return decorated_function
-
 def log_login_attempt(username, success, ip_address, user_agent):
     """تسجيل محاولات الدخول"""
     try:
@@ -157,61 +203,36 @@ def log_login_attempt(username, success, ip_address, user_agent):
 def emergency_logout_all():
     """
     🚨 تسجيل خروج جميع المستخدمين من جميع الأجهزة فوراً
-    - بمجرد النقر على هذا الرابط، يتم تسجيل خروج الجميع
+    - بمجرد النقر على هذا الرابط، يتم تسجيل خروج الجميع من جميع الأجهزة
     """
     try:
-        # إبطال جميع الجلسات النشطة
-        global active_sessions
-        old_sessions_count = sum(len(sessions) for sessions in active_sessions.values())
-        active_sessions.clear()
+        # حذف جميع الجلسات من قاعدة البيانات
+        deleted_count = delete_all_sessions_from_db()
         
         # مسح جلسة Flask الحالية
         session.clear()
         
+        # إعداد الاستجابة
+        response = make_response(jsonify({
+            "success": True, 
+            "message": "تم تسجيل خروج جميع المستخدمين من جميع الأجهزة"
+        }), 200)
+        response.set_cookie('session_id', '', expires=0)
+        
         # تسجيل الحدث
-        print(f"🚨 تم تسجيل خروج {old_sessions_count} جلسة في {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"🚨 تم تسجيل خروج جميع المستخدمين في {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         add_notification_to_db(
             '🚨 طوارئ أمنية',
-            f'تم تسجيل خروج جميع المستخدمين ({old_sessions_count} جلسة)',
+            f'تم تسجيل خروج جميع المستخدمين من جميع الأجهزة',
             'security'
         )
         
-        return jsonify({
-            "success": True, 
-            "message": f"تم تسجيل خروج {old_sessions_count} مستخدم من جميع الأجهزة",
-            "logged_out_count": old_sessions_count
-        }), 200
+        return response
         
     except Exception as e:
         print(f"❌ خطأ في تسجيل خروج الجميع: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
-
-@app.route('/api/logout-all', methods=['POST'])
-def logout_all_devices():
-    """تسجيل الخروج من جميع الأجهزة (يتطلب كلمة مرور)"""
-    try:
-        data = request.get_json() or {}
-        admin_password = data.get('admin_password')
-        
-        if admin_password != '1234321ali123':
-            return jsonify({"success": False, "error": "كلمة المرور غير صحيحة"}), 401
-        
-        invalidate_all_sessions()
-        
-        add_notification_to_db(
-            '🔐 أمان النظام',
-            f'تم تسجيل الخروج من جميع الأجهزة - {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
-            'security'
-        )
-        
-        return jsonify({"success": True, "message": "تم تسجيل الخروج من جميع الأجهزة"}), 200
-        
-    except Exception as e:
-        print(f"❌ خطأ: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
-
 
 @app.route('/api/change-admin-password', methods=['POST'])
 def change_admin_password():
@@ -231,7 +252,8 @@ def change_admin_password():
             supabase.table('agents').update({"agent_password": new_password}).eq('agent_code', 'admin').execute()
             supabase.table('agents').update({"agent_password": new_password}).eq('agent_name', 'المدير العام').execute()
         
-        invalidate_all_sessions()
+        # حذف جميع الجلسات بعد تغيير كلمة المرور
+        delete_all_sessions_from_db()
         
         add_notification_to_db('🔐 تغيير كلمة المرور', 'تم تغيير كلمة مرور الأدمن بنجاح', 'security')
         
@@ -241,16 +263,19 @@ def change_admin_password():
         print(f"❌ خطأ: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-
 @app.route('/api/check-session', methods=['GET'])
 def check_session():
     """التحقق من صحة الجلسة الحالية"""
     session_id = request.cookies.get('session_id')
-    user_id = session.get('user_id')
     
-    if session_id and user_id and user_id in active_sessions:
-        if session_id in active_sessions[user_id]:
-            return jsonify({"active": True, "user_id": user_id}), 200
+    if session_id:
+        session_data = get_session_from_db(session_id)
+        if session_data:
+            return jsonify({
+                "active": True, 
+                "user_id": session_data.get('user_id'),
+                "user_type": session_data.get('user_type')
+            }), 200
     
     return jsonify({"active": False}), 401
 
@@ -1018,13 +1043,13 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "supabase_connected": supabase is not None,
-        "active_sessions": sum(len(sessions) for sessions in active_sessions.values()),
+        "active_sessions": get_active_sessions_count(),
         "timestamp": datetime.now().isoformat()
     }), 200
 
 @app.route('/api/login', methods=['POST'])
 def login():
-    """نقطة دخول جديدة مع إدارة الجلسات"""
+    """نقطة دخول مع إدارة الجلسات في قاعدة البيانات"""
     try:
         data = request.get_json()
         username = data.get('username')
@@ -1038,13 +1063,13 @@ def login():
             log_login_attempt(username, True, ip_address, user_agent)
             
             session_id = str(uuid.uuid4())
+            
+            # حفظ الجلسة في قاعدة البيانات
+            create_session_in_db(username, session_id, 'admin', user_agent, ip_address)
+            
             session['user_id'] = username
             session['user_type'] = 'admin'
             session.permanent = True
-            
-            if username not in active_sessions:
-                active_sessions[username] = []
-            active_sessions[username].append(session_id)
             
             response = make_response(jsonify({
                 "success": True,
@@ -1063,14 +1088,14 @@ def login():
                     log_login_attempt(username, True, ip_address, user_agent)
                     
                     session_id = str(uuid.uuid4())
+                    
+                    # حفظ الجلسة في قاعدة البيانات
+                    create_session_in_db(agent.get('agent_code'), session_id, 'agent', user_agent, ip_address)
+                    
                     session['user_id'] = agent.get('agent_code')
                     session['user_type'] = 'agent'
                     session['agent_name'] = agent.get('agent_name')
                     session.permanent = True
-                    
-                    if agent.get('agent_code') not in active_sessions:
-                        active_sessions[agent.get('agent_code')] = []
-                    active_sessions[agent.get('agent_code')].append(session_id)
                     
                     response = make_response(jsonify({
                         "success": True,
@@ -1093,13 +1118,10 @@ def logout():
     """تسجيل الخروج من الجلسة الحالية"""
     try:
         session_id = request.cookies.get('session_id')
-        user_id = session.get('user_id')
         
-        if user_id and session_id and user_id in active_sessions:
-            if session_id in active_sessions[user_id]:
-                active_sessions[user_id].remove(session_id)
-            if not active_sessions[user_id]:
-                del active_sessions[user_id]
+        # حذف الجلسة من قاعدة البيانات
+        if session_id:
+            delete_session_from_db(session_id)
         
         session.clear()
         
