@@ -32,15 +32,12 @@
     .status-راجع { background: #7f1d1d; color: #fca5a5; }
     .status-قيد { background: #78350f; color: #fcd34d; }
     .status-جديد { background: #1e3a5f; color: #93c5fd; }
+    .status-ملغي { background: #4a044e; color: #d8b4fe; }
     .modal-overlay { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
     .agent-card { cursor: pointer; transition: all 0.2s; }
     .agent-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
     @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     .animate-fade-in-up { animation: fadeInUp 0.3s ease-out; }
-    .flower-top { position: fixed; pointer-events: none; z-index: 9999; font-size: 24px; animation: floatDown 4s ease-out forwards; }
-    @keyframes floatDown { 0% { opacity: 1; transform: translateY(-50px) rotate(0deg); } 100% { opacity: 0; transform: translateY(calc(100vh + 100px)) rotate(360deg); } }
-    .balloon { position: fixed; pointer-events: none; z-index: 9998; font-size: 30px; animation: floatUp 4s ease-out forwards; }
-    @keyframes floatUp { 0% { opacity: 1; transform: translateY(calc(100vh + 50px)) rotate(0deg); } 100% { opacity: 0; transform: translateY(-100px) rotate(360deg); } }
     .clickable-note { cursor: pointer; transition: all 0.2s; }
     .clickable-note:hover { color: #60a5fa; text-decoration: underline; }
     .copyable { cursor: pointer; transition: all 0.2s; }
@@ -59,6 +56,8 @@
     .inventory-item:hover { background: rgba(255,255,255,0.05); }
     .inventory-actions { opacity: 0.7; transition: opacity 0.2s; }
     .inventory-item:hover .inventory-actions { opacity: 1; }
+    .today-btn-active { background-color: #f59e0b; color: #0f172a; }
+    .today-btn-inactive { background-color: #1e293b; color: #94a3b8; }
   </style>
 </head>
 <body class="h-full bg-slate-950 text-slate-100">
@@ -77,8 +76,8 @@ const firebaseConfig = {
 const VAPID_KEY = "BA2ONQejtLqvY0xKKIy0WaG3SAc1CCVm1xqvUhHI1gzxxlqGq65sGei8OroEqAK1haxQygk_2cp8Ugf-jyt3tWA";
 const DEFAULT_AGENT_PROFIT = 1000;
 
-// قائمة المحافظات (كمية احتياطية)
-const FALLBACK_GOVERNORATES = ['بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء', 'ذي قار', 'ميسان', 'بابل', 'واسط', 'صلاح الدين', 'ديالى', 'المثنى', 'القادسية'];
+// ✅ قائمة المحافظات الكاملة (تمت إضافة السليمانية ودهوك)
+const FALLBACK_GOVERNORATES = ['بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء', 'ذي قار', 'ميسان', 'بابل', 'واسط', 'صلاح الدين', 'ديالى', 'المثنى', 'القادسية', 'السليمانية', 'دهوك'];
 
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
@@ -192,6 +191,86 @@ async function syncWithJenni() {
         showToast('❌ حدث خطأ أثناء المزامنة');
     }
 }
+
+// ============== دالة تسديد أرباح المندوب ==============
+let pendingAgentForSettlement = null;
+
+function openSettleAgentModal(agentId) {
+    const agent = allAgents.find(a => a.__backendId === agentId);
+    if (!agent) return;
+    
+    const agentOrders = allOrders.filter(o => o.agent_name === agent.agent_name && o.status === 'واصل');
+    const totalProfit = agentOrders.reduce((sum, o) => sum + (o.profit || 0), 0);
+    
+    if (totalProfit === 0) {
+        showToast('⚠️ لا توجد أرباح مستحقة لهذا المندوب');
+        return;
+    }
+    
+    pendingAgentForSettlement = agent;
+    document.getElementById('settleAgentName').textContent = agent.agent_name;
+    document.getElementById('settleAgentTotalProfit').textContent = totalProfit.toLocaleString('ar-IQ');
+    document.getElementById('settleAgentProfit').value = totalProfit;
+    document.getElementById('settleAgentModal').classList.remove('hidden');
+}
+
+function closeSettleAgentModal() {
+    document.getElementById('settleAgentModal').classList.add('hidden');
+    pendingAgentForSettlement = null;
+}
+
+async function confirmSettleAgent() {
+    if (!pendingAgentForSettlement) return;
+    
+    const paidAmount = parseFloat(document.getElementById('settleAgentProfit').value) || 0;
+    const agent = pendingAgentForSettlement;
+    const agentName = agent.agent_name;
+    
+    const agentOrders = allOrders.filter(o => o.agent_name === agentName && o.status === 'واصل');
+    const totalProfit = agentOrders.reduce((sum, o) => sum + (o.profit || 0), 0);
+    
+    if (paidAmount <= 0) {
+        showToast('❌ الرجاء إدخال مبلغ السداد');
+        return;
+    }
+    
+    if (paidAmount > totalProfit) {
+        showToast(`⚠️ المبلغ المدخل (${paidAmount.toLocaleString('ar-IQ')}) أكبر من إجمالي الأرباح (${totalProfit.toLocaleString('ar-IQ')})`);
+        return;
+    }
+    
+    if (!confirm(`هل أنت متأكد من تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}؟\n\nسيتم حذف ${agentOrders.length} طلب واصل من سجل المندوب.`)) {
+        return;
+    }
+    
+    showToast(`🔄 جاري تسديد أرباح المندوب ${agentName}...`);
+    
+    try {
+        const response = await fetch(`/api/settle-agent/${agent.__backendId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paid_amount: paidAmount })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(`✅ تم تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}`);
+            addNotification('سداد أرباح', `تم تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}`, 'settlement');
+            closeSettleAgentModal();
+            setTimeout(() => {
+                if (window.dataSdk && window.dataSdk.loadData) {
+                    window.dataSdk.loadData();
+                }
+            }, 500);
+        } else {
+            showToast('❌ فشل تسديد الأرباح: ' + (result.error || 'خطأ غير معروف'));
+        }
+    } catch (error) {
+        console.error('خطأ في التسديد:', error);
+        showToast('❌ حدث خطأ أثناء تسديد الأرباح');
+    }
+}
 </script>
 
 <!-- Login Page -->
@@ -209,7 +288,7 @@ async function syncWithJenni() {
         <button id="loginBtn" type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-3 rounded-lg font-700 transition flex items-center justify-center gap-2 mt-6"> <i data-lucide="log-in" style="width:18px;height:18px"></i> دخول </button>
         <p id="loginError" class="text-red-400 text-sm text-center hidden"></p>
       </form>
-      <div class="mt-6 pt-6 border-t border-slate-800 text-center"><p class="text-slate-500 text-xs">admin / admin123</p></div>
+      <div class="mt-6 pt-6 border-t border-slate-800 text-center"><p class="text-slate-500 text-xs">admin / ali112233</p></div>
     </div>
   </div>
 </div>
@@ -253,7 +332,7 @@ async function syncWithJenni() {
           </button>
         </div>
         <button id="addOrderBtn" onclick="showNewOrderModal()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition hidden"> <i data-lucide="plus" style="width:16px;height:16px"></i> طلب جديد </button>
-        <button id="syncWithJenniBtn" onclick="syncWithJenni()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition">
+        <button id="syncWithJenniBtn" onclick="syncWithJenni()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition hidden">
           <i data-lucide="refresh-cw" style="width:16px;height:16px"></i> مزامنة مع الزعيم
         </button>
         <button onclick="logout()" class="text-slate-400 hover:text-red-400 p-2 rounded-lg hover:bg-slate-800 transition"> <i data-lucide="log-out" style="width:20px;height:20px"></i> </button>
@@ -264,9 +343,9 @@ async function syncWithJenni() {
     <div id="page-dashboard" class="page-content p-6 fade-in hidden">
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">إجمالي الطلبات</span><i data-lucide="shopping-bag" style="width:20px;height:20px;color:#3b82f6"></i></div><p id="statOrders" class="text-2xl font-800 text-white">0</p></div>
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">المبيعات</span><i data-lucide="trending-up" style="width:20px;height:20px;color:#10b981"></i></div><p id="statSales" class="text-2xl font-800 text-white">0</p><span class="text-xs text-slate-500">د.ع</span></div>
         <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">واصل</span><i data-lucide="check-circle" style="width:20px;height:20px;color:#22c55e"></i></div><p id="statDelivered" class="text-2xl font-800 text-emerald-400">0</p></div>
         <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">مرتجع</span><i data-lucide="rotate-ccw" style="width:20px;height:20px;color:#ef4444"></i></div><p id="statReturned" class="text-2xl font-800 text-red-400">0</p></div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">ملغي</span><i data-lucide="x-circle" style="width:20px;height:20px;color:#a855f7"></i></div><p id="statCancelled" class="text-2xl font-800 text-purple-400">0</p></div>
       </div>
       <div class="bg-slate-900 border border-slate-800 rounded-xl"><div class="p-4 border-b border-slate-800 flex items-center justify-between"><h3 class="font-700">آخر الطلبات</h3><button onclick="switchPage('orders')" class="text-xs text-amber-400 hover:text-amber-300">عرض الكل ←</button></div><div id="recentOrdersList" class="divide-y divide-slate-800"></div></div>
       <div class="mt-6 bg-slate-900 border border-slate-800 rounded-xl"><div class="p-4 border-b border-slate-800"><h3 class="font-700">أداء المندوبين</h3></div><div id="agentPerformance" class="p-4"></div></div>
@@ -280,20 +359,31 @@ async function syncWithJenni() {
         <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><span class="text-xs text-slate-500">قيد التوصيل</span><p id="agentStatPending" class="text-2xl font-800 text-amber-400">0</p></div>
         <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><span class="text-xs text-slate-500">الراجعة</span><p id="agentStatReturned" class="text-2xl font-800 text-red-400">0</p></div>
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><p class="text-slate-400 text-sm">إجمالي المبيعات</p><p id="agentStatTotalSales" class="text-2xl font-800 text-emerald-400">0 د.ع</p></div>
+      <div class="grid grid-cols-1 md:grid-cols-1 gap-4 mb-6">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><p class="text-slate-400 text-sm">إجمالي أرباحي</p><p id="agentStatProfit" class="text-2xl font-800 text-amber-400">0 د.ع</p></div>
       </div>
       <div class="bg-slate-900 border border-slate-800 rounded-xl"><div class="p-4 border-b border-slate-800"><h3 class="font-700">طلباتي الأخيرة</h3></div><div id="agentRecentOrdersList" class="divide-y divide-slate-800"></div></div>
     </div>
 
-    <!-- Orders Page -->
+    <!-- Orders Page with Today Button -->
     <div id="page-orders" class="page-content p-6 fade-in hidden">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <div class="flex items-center gap-2"><select id="filterStatus" onchange="renderOrders()" class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300"><option value="all">كل الحالات</option><option value="جديد">جديد</option><option value="قيد التوصيل">قيد التوصيل</option><option value="واصل">واصل</option><option value="راجع">راجع</option></select></div>
+        <div class="flex items-center gap-2">
+          <select id="filterStatus" onchange="renderOrders()" class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300">
+            <option value="all">كل الحالات</option>
+            <option value="جديد">جديد</option>
+            <option value="قيد التوصيل">قيد التوصيل</option>
+            <option value="واصل">واصل</option>
+            <option value="راجع">راجع</option>
+            <option value="ملغي">ملغي</option>
+          </select>
+          <button id="todayOrdersBtn" onclick="toggleTodayFilter()" class="px-4 py-2 rounded-lg text-sm font-700 transition flex items-center gap-2 today-btn-inactive">
+            <i data-lucide="calendar" style="width:16px;height:16px"></i> طلبات اليوم
+          </button>
+        </div>
         <input id="searchOrders" oninput="renderOrders()" type="text" placeholder="بحث بالاسم أو الهاتف..." class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300 w-56">
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th><tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody></table></div></div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody></table></div></div>
     </div>
 
     <!-- Agents Page -->
@@ -353,6 +443,7 @@ async function syncWithJenni() {
     <div><label class="block text-sm text-slate-400 mb-1">📍 المحافظة</label><select id="f_governorate" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"><option value="">جار التحميل...</option></select></div>
     <div><label class="block text-sm text-slate-400 mb-1">🏘️ المنطقة/الحي</label><input id="f_district" required placeholder="المنطقة أو الحي" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
   </div>
+  <div><label class="block text-sm text-slate-400 mb-1">📍 أقرب نقطة دالة</label><input id="f_landmark" placeholder="مدرسة - جامع - محطة - مجمع" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
   <div><label class="block text-sm text-slate-400 mb-1">📦 المنتج</label><input id="f_product" required placeholder="اسم المنتج" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
   <div class="grid grid-cols-2 gap-3"><div><label class="block text-sm text-slate-400 mb-1">🔢 الكمية</label><input id="f_qty" type="number" value="1" placeholder="الكمية" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">💰 السعر (د.ع)</label><input id="f_price" type="number" required placeholder="السعر" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div></div>
   <div><label class="block text-sm text-slate-400 mb-1">📅 التاريخ</label><input id="f_date" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
@@ -370,7 +461,40 @@ async function syncWithJenni() {
 
 <div id="deleteConfirm" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeDeleteConfirm()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80 text-center"><i data-lucide="trash-2" style="width:40px;height:40px;color:#ef4444" class="mx-auto mb-3"></i><p id="deleteConfirmText" class="font-700 mb-4">حذف العنصر؟</p><div class="flex gap-3"><button onclick="closeDeleteConfirm()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button id="confirmDeleteBtn" onclick="confirmDelete()" class="flex-1 bg-red-600 hover:bg-red-700 py-2 rounded-lg">حذف</button></div></div></div>
 
-<div id="statusModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeStatusModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80"><p class="font-700 mb-3">🔔 تغيير حالة الطلب</p><div id="statusOptions" class="space-y-2"></div></div></div>
+<!-- نافذة تسديد أرباح المندوب -->
+<div id="settleAgentModal" class="fixed inset-0 z-50 hidden">
+  <div class="modal-overlay absolute inset-0" onclick="closeSettleAgentModal()"></div>
+  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-emerald-500/30 rounded-2xl p-6 w-96 shadow-2xl">
+    <div class="text-center mb-4">
+      <i data-lucide="wallet" style="width:48px;height:48px;color:#10b981" class="mx-auto mb-3"></i>
+      <h3 class="font-700 text-lg text-emerald-400">💰 تسديد أرباح المندوب</h3>
+      <p class="text-slate-400 text-sm mt-1">سيتم تصفير الأرباح بعد التسديد</p>
+    </div>
+    <p class="text-sm mb-2 text-slate-400">👤 المندوب: <span id="settleAgentName" class="text-white font-bold">-</span></p>
+    <p class="text-sm mb-2 text-slate-400">💰 إجمالي الأرباح المستحقة: <span id="settleAgentTotalProfit" class="text-emerald-400 font-bold">0</span> د.ع</p>
+    <label class="block text-slate-400 text-sm mb-1">💵 المبلغ المدفوع (د.ع)</label>
+    <input id="settleAgentProfit" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 mb-4" placeholder="أدخل مبلغ السداد">
+    <div class="flex gap-3">
+      <button onclick="closeSettleAgentModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg transition">إلغاء</button>
+      <button onclick="confirmSettleAgent()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 py-2 rounded-lg font-700 transition">تسديد</button>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة تغيير حالة الطلب -->
+<div id="dynamicStatusModal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeStatusModal()"></div>
+  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-amber-500/30 rounded-2xl p-6 w-96 max-w-full shadow-2xl">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="font-700 text-lg">🔄 تغيير حالة الطلب</h3>
+      <button onclick="closeStatusModal()" class="text-slate-400 hover:text-slate-200">
+        <i data-lucide="x" style="width:20px;height:20px"></i>
+      </button>
+    </div>
+    <div id="statusModalContent" class="space-y-2"></div>
+    <button onclick="closeStatusModal()" class="w-full mt-4 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-lg transition">إلغاء</button>
+  </div>
+</div>
 
 <div id="editProfitModal" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeEditProfitModal()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-96"><h3 class="font-700 text-lg mb-4">💰 تعديل الربح</h3><p id="editProfitCustomer" class="text-sm mb-2 text-slate-400">الزبون: -</p><input id="editProfitInput" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 mb-4" placeholder="أدخل مبلغ الربح"><div class="flex gap-3"><button onclick="closeEditProfitModal()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button onclick="confirmEditProfit()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 py-2 rounded-lg font-700">حفظ</button></div></div></div>
 
@@ -389,6 +513,7 @@ let editingProfitOrderId = null;
 let currentEditAgent = null;
 let editingDateOrderId = null;
 let editingNoteOrderId = null;
+let todayFilterActive = false;
 
 // ============== نظام الإشعارات ==============
 let notifications = [];
@@ -424,7 +549,7 @@ function renderNotificationPanel() {
   const listEl = document.getElementById('notificationsList');
   if (!listEl) return;
   if (notifications.length === 0) { listEl.innerHTML = '<div class="p-4 text-center text-slate-500">📭 لا توجد إشعارات</div>'; return; }
-  listEl.innerHTML = notifications.map(n => `<div class="notification-item p-3 hover:bg-slate-800/50 transition cursor-pointer ${!n.read ? 'bg-slate-800/30' : ''}" onclick="markNotificationRead(${n.id})"><div class="flex items-start gap-2"><div class="text-lg">${n.type === 'order' ? '📦' : n.type === 'note' ? '📌' : '🔔'}</div><div class="flex-1"><p class="text-sm font-semibold ${!n.read ? 'text-amber-400' : 'text-slate-300'}">${n.title}</p><p class="text-xs text-slate-400">${n.message}</p><p class="text-xs text-slate-500 mt-1">${n.time}</p></div>${!n.read ? '<div class="w-2 h-2 bg-amber-500 rounded-full mt-2"></div>' : ''}</div></div>`).join('');
+  listEl.innerHTML = notifications.map(n => `<div class="notification-item p-3 hover:bg-slate-800/50 transition cursor-pointer ${!n.read ? 'bg-slate-800/30' : ''}" onclick="markNotificationRead(${n.id})"><div class="flex items-start gap-2"><div class="text-lg">${n.type === 'order' ? '📦' : n.type === 'note' ? '📌' : n.type === 'settlement' ? '💰' : '🔔'}</div><div class="flex-1"><p class="text-sm font-semibold ${!n.read ? 'text-amber-400' : 'text-slate-300'}">${n.title}</p><p class="text-xs text-slate-400">${n.message}</p><p class="text-xs text-slate-500 mt-1">${n.time}</p></div>${!n.read ? '<div class="w-2 h-2 bg-amber-500 rounded-full mt-2"></div>' : ''}</div></div>`).join('');
 }
 
 function markNotificationRead(id) {
@@ -452,14 +577,36 @@ function closeNotifications() {
   if (backdrop) backdrop.remove(); if (panel) panel.remove(); notificationPanelOpen = false;
 }
 
-// ============== دالة حذف الطلب من نظام الزعيم ==============
+// ============== دالة حذف/إلغاء الطلب من نظام الزعيم ==============
 async function deleteFromJenni(shipmentNumber) {
   try {
     const response = await fetch(`/api/delete-from-jenni/${shipmentNumber}`, { method: 'DELETE' });
     const result = await response.json();
-    if (result.success) { console.log('✅ تم حذف الشحنة من الزعيم'); return true; }
-    else { console.log('⚠️ فشل حذف الزعيم:', result.error); return false; }
+    if (result.success) { 
+      console.log(`✅ ${result.action === 'deleted' ? 'تم حذف' : 'تم إلغاء'} الشحنة من الزعيم:`, result.message);
+      return true; 
+    }
+    else { console.log('⚠️ فشل معالجة الزعيم:', result.error); return false; }
   } catch (error) { console.error('❌ خطأ:', error); return false; }
+}
+
+async function cancelInJenni(shipmentNumber, reason) {
+  try {
+    const response = await fetch(`/api/cancel-in-jenni/${shipmentNumber}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason || 'تم إلغاء الطلب' })
+    });
+    const result = await response.json();
+    if (result.success) {
+      console.log('✅ تم إلغاء الطلب في الزعيم:', result.message);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('❌ خطأ في الإلغاء:', error);
+    return false;
+  }
 }
 
 // ============== DATA SDK ==============
@@ -487,21 +634,31 @@ const dataHandler = {
 };
 window.dataSdk.init(dataHandler);
 
-function createFlowersFromTop() {
-  const flowers = ['🌸', '🌼', '🌻', '🌺', '🌸', '🌷', '🌹'];
-  for (let i = 0; i < 30; i++) { setTimeout(() => { const flower = document.createElement('div'); flower.className = 'flower-top'; flower.textContent = flowers[Math.floor(Math.random() * flowers.length)]; flower.style.left = Math.random() * window.innerWidth + 'px'; flower.style.top = '-50px'; flower.style.fontSize = (Math.random() * 20 + 20) + 'px'; flower.style.animationDuration = (Math.random() * 2 + 2.5) + 's'; flower.style.animationDelay = Math.random() * 0.3 + 's'; document.body.appendChild(flower); setTimeout(() => flower.remove(), 4000); }, i * 80); }
-}
-
 function showProgrammerInfo() {
   const modal = document.createElement('div'); modal.className = 'fixed inset-0 z-[200] flex items-center justify-center p-4'; modal.style.backgroundColor = 'rgba(0,0,0,0.7)'; modal.style.backdropFilter = 'blur(8px)';
-  modal.innerHTML = `<div class="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-emerald-500/30 animate-fade-in-up"><div class="text-center"><div class="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4"><i data-lucide="code-2" style="width:40px;height:40px;color:#10b981"></i></div><h2 class="text-2xl font-bold text-emerald-400 mb-2">👨‍💻 المهندس حيدر</h2><p class="text-slate-400 text-sm mb-4">مطور ومصمم النظام</p><div class="space-y-3 mt-4 text-right"><div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><i data-lucide="user" style="width:20px;height:20px;color:#60a5fa"></i><div class="flex-1"><p class="text-slate-400 text-xs">الاسم الكامل</p><p class="text-white font-bold text-lg">حيدر علي</p></div></div><div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3 group cursor-pointer" onclick='copyToClipboard("07813824203")'><i data-lucide="phone" style="width:20px;height:20px;color:#34d399"></i><div class="flex-1"><p class="text-slate-400 text-xs">رقم الهاتف <span class="text-emerald-400 text-xs mr-2">(اضغط للنسخ)</span></p><p class="text-white font-bold text-lg">07813824203</p></div></div></div><button onclick="this.closest('.fixed').remove()" class="mt-6 w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-2"><i data-lucide="x" style="width:18px;height:18px"></i> إغلاق</button></div></div>`;
-  document.body.appendChild(modal); lucide.createIcons(); modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.innerHTML = `<div class="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-emerald-500/30 animate-fade-in-up"><div class="text-center"><div class="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4"><i data-lucide="code-2" style="width:40px;height:40px;color:#10b981"></i></div><h2 class="text-2xl font-bold text-emerald-400 mb-2">👨‍💻 المهندس حيدر</h2><p class="text-slate-400 text-sm mb-4">مطور ومصمم النظام</p><div class="space-y-3 mt-4 text-right"><div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3"><i data-lucide="user" style="width:20px;height:20px;color:#60a5fa"></i><div class="flex-1"><p class="text-slate-400 text-xs">الاسم الكامل</p><p class="text-white font-bold text-lg">حيدر علي</p></div></div><div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3 group cursor-pointer" onclick='copyToClipboard("07813824203")'><i data-lucide="phone" style="width:20px;height:20px;color:#34d399"></i><div class="flex-1"><p class="text-slate-400 text-xs">رقم الهاتف <span class="text-emerald-400 text-xs mr-2">(اضغط للنسخ)</span></p><p class="text-white font-bold text-lg">07813824203</p></div></div><div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3 group cursor-pointer" onclick='copyToClipboard("07740193972")'><i data-lucide="phone" style="width:20px;height:20px;color:#34d399"></i><div class="flex-1"><p class="text-slate-400 text-xs">رقم الهاتف 2 <span class="text-emerald-400 text-xs mr-2">(اضغط للنسخ)</span></p><p class="text-white font-bold text-lg">07740193972</p></div></div></div><button onclick="this.closest('.fixed').remove()" class="mt-6 w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-2"><i data-lucide="x" style="width:18px;height:18px"></i> إغلاق</button></div></div>`;
+  document.body.appendChild(modal); if (typeof lucide !== 'undefined') lucide.createIcons(); modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
 function copyToClipboard(text) { navigator.clipboard.writeText(text).then(() => showToast(`✅ تم نسخ: ${text}`)).catch(() => showToast('❌ فشل النسخ')); }
 
 let autoRefreshInterval = null;
 function startAutoRefresh() { if (autoRefreshInterval) clearInterval(autoRefreshInterval); autoRefreshInterval = setInterval(() => { if (window.dataSdk && window.dataSdk.loadData) window.dataSdk.loadData(); }, 10000); }
 startAutoRefresh();
+
+function toggleTodayFilter() {
+  todayFilterActive = !todayFilterActive;
+  const btn = document.getElementById('todayOrdersBtn');
+  if (todayFilterActive) {
+    btn.classList.remove('today-btn-inactive');
+    btn.classList.add('today-btn-active');
+    showToast('📅 عرض طلبات اليوم فقط');
+  } else {
+    btn.classList.remove('today-btn-active');
+    btn.classList.add('today-btn-inactive');
+    showToast('📋 عرض جميع الطلبات');
+  }
+  renderOrders();
+}
 
 async function handleLogin(e) {
   e.preventDefault();
@@ -510,9 +667,9 @@ async function handleLogin(e) {
   const btn = document.getElementById('loginBtn'); const errorMsg = document.getElementById('loginError');
   errorMsg.classList.add('hidden'); btn.disabled = true; btn.innerHTML = '<span class="animate-pulse">جاري التحقق...</span>';
   await new Promise(resolve => setTimeout(resolve, 300));
-  if (username === 'admin' && password === 'admin123') {
+  if (username === 'admin' && password === 'ali112233') {
     currentUser = { type: 'admin', agent_name: 'المدير العام' }; isAgentMode = false;
-    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons(); showApp(); saveLoginState(); showToast('مرحباً في لوحة التحكم الإدارية');
+    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; if (typeof lucide !== 'undefined') lucide.createIcons(); showApp(); saveLoginState(); showToast('مرحباً في لوحة التحكم الإدارية');
     const token = localStorage.getItem('fcm_token');
     if (token) await saveTokenToServer(token);
     return;
@@ -520,12 +677,12 @@ async function handleLogin(e) {
   const agent = allAgents.find(a => (a.agent_code === username || a.agent_name === username) && a.agent_password === password);
   if (agent) {
     currentUser = agent; isAgentMode = true;
-    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons(); showApp(); saveLoginState(); showToast(`مرحباً ${agent.agent_name}`);
+    btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; if (typeof lucide !== 'undefined') lucide.createIcons(); showApp(); saveLoginState(); showToast(`مرحباً ${agent.agent_name}`);
     const token = localStorage.getItem('fcm_token');
     if (token) await saveTokenToServer(token);
     return;
   }
-  btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; lucide.createIcons();
+  btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; if (typeof lucide !== 'undefined') lucide.createIcons();
   errorMsg.textContent = '❌ بيانات دخول غير صحيحة'; errorMsg.classList.remove('hidden');
 }
 
@@ -536,6 +693,7 @@ function showApp() {
     document.getElementById('agentsNav').classList.add('hidden'); document.getElementById('customersNav').classList.add('hidden');
     document.getElementById('inventoryNav').classList.add('hidden'); document.getElementById('reportsNav').classList.add('hidden');
     document.getElementById('settingsNav').classList.add('hidden'); document.getElementById('addOrderBtn').classList.remove('hidden');
+    document.getElementById('syncWithJenniBtn').classList.add('hidden');
     document.getElementById('userName').textContent = currentUser.agent_name; document.getElementById('userRole').textContent = 'مندوب';
     document.getElementById('userAvatar').textContent = currentUser.agent_name.charAt(0); switchPage('agent-dashboard');
   } else {
@@ -543,41 +701,81 @@ function showApp() {
     document.getElementById('agentsNav').classList.remove('hidden'); document.getElementById('customersNav').classList.remove('hidden');
     document.getElementById('inventoryNav').classList.remove('hidden'); document.getElementById('reportsNav').classList.remove('hidden');
     document.getElementById('settingsNav').classList.remove('hidden'); document.getElementById('addOrderBtn').classList.add('hidden');
+    document.getElementById('syncWithJenniBtn').classList.remove('hidden');
     document.getElementById('userName').textContent = 'المدير العام'; document.getElementById('userRole').textContent = 'مسؤول النظام';
     document.getElementById('userAvatar').textContent = 'م'; switchPage('dashboard');
   }
-  lucide.createIcons();
+  if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
 function logout() { currentUser = null; isAgentMode = false; clearLoginState(); document.getElementById('app').classList.add('hidden'); document.getElementById('loginPage').classList.remove('hidden'); document.getElementById('loginForm').reset(); showToast('تم تسجيل الخروج'); }
 function switchPage(page) { closeNotifications(); document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden')); const target = document.getElementById('page-' + page); if (target) target.classList.remove('hidden'); document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active')); const activeBtn = document.querySelector(`[data-page="${page}"]`); if (activeBtn) activeBtn.classList.add('active'); const titles = { dashboard: 'لوحة التحكم', 'agent-dashboard': 'لوحتي الخاصة', orders: 'الطلبات', agents: 'المندوبين', customers: 'العملاء', inventory: 'المخزن', reports: 'التقارير', settings: 'الإعدادات' }; document.getElementById('pageTitle').textContent = titles[page] || page; }
 function toggleSidebar() { const sidebar = document.getElementById('sidebar'); sidebar.classList.toggle('hidden'); }
 
-function updateDashboard() { if (isAgentMode && currentUser) updateAgentDashboard(); else updateAdminDashboard(); }
+function updateDashboard() { 
+  if (isAgentMode && currentUser) {
+    updateAgentDashboard();
+  } else {
+    updateAdminDashboard();
+  }
+}
+
 function updateAgentDashboard() {
   const currentAgentName = (currentUser.agent_name || '').trim();
   const agentOrders = allOrders.filter(o => (o.agent_name || '').trim() === currentAgentName);
-  const total = agentOrders.length, delivered = agentOrders.filter(o => o.status === 'واصل').length, pending = agentOrders.filter(o => o.status === 'قيد التوصيل').length, returned = agentOrders.filter(o => o.status === 'راجع').length;
-  const sales = agentOrders.filter(o => o.status === 'واصل').reduce((s, o) => s + (o.total || 0), 0);
+  const total = agentOrders.length;
+  const delivered = agentOrders.filter(o => o.status === 'واصل').length;
+  const pending = agentOrders.filter(o => o.status === 'قيد التوصيل').length;
+  const returned = agentOrders.filter(o => o.status === 'راجع').length;
   const totalProfit = agentOrders.filter(o => o.status === 'واصل').reduce((s, o) => s + (o.profit || 0), 0);
-  document.getElementById('agentStatTotalOrders').textContent = total; document.getElementById('agentStatDelivered').textContent = delivered;
-  document.getElementById('agentStatPending').textContent = pending; document.getElementById('agentStatReturned').textContent = returned;
-  document.getElementById('agentStatTotalSales').textContent = sales.toLocaleString('ar-IQ'); document.getElementById('agentStatProfit').textContent = totalProfit.toLocaleString('ar-IQ');
+  
+  document.getElementById('agentStatTotalOrders').textContent = total;
+  document.getElementById('agentStatDelivered').textContent = delivered;
+  document.getElementById('agentStatPending').textContent = pending;
+  document.getElementById('agentStatReturned').textContent = returned;
+  document.getElementById('agentStatProfit').textContent = totalProfit.toLocaleString('ar-IQ');
+  
   const recent = [...agentOrders].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8);
   const container = document.getElementById('agentRecentOrdersList');
-  if (container) { if (!recent.length) container.innerHTML = '<div class="p-8 text-center text-slate-600">📭 لا توجد طلبات</div>'; else container.innerHTML = recent.map(o => `<div class="flex justify-between px-5 py-4 border-b border-slate-800"><div><p class="font-700">${escapeHtml(o.customer_name)}</p><p class="text-xs text-slate-500">${escapeHtml(o.product)}</p></div><div class="text-right"><p class="text-emerald-400">${(o.total||0).toLocaleString('ar-IQ')} د.ع</p><span class="inline-block px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}">${o.status}</span></div></div>`).join(''); }
+  if (container) { 
+    if (!recent.length) container.innerHTML = '<div class="p-8 text-center text-slate-600">📭 لا توجد طلبات</div>'; 
+    else container.innerHTML = recent.map(o => `<div class="flex justify-between px-5 py-4 border-b border-slate-800"><div><p class="font-700">${escapeHtml(o.customer_name)}</p><p class="text-xs text-slate-500">${escapeHtml(o.product)}</p></div><div class="text-right"><p class="text-emerald-400">${(o.total||0).toLocaleString('ar-IQ')} د.ع</p><span class="inline-block px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}">${o.status}</span></div></div>`).join(''); 
+  }
 }
+
 function updateAdminDashboard() {
-  const total = allOrders.length, delivered = allOrders.filter(o => o.status === 'واصل').length, returned = allOrders.filter(o => o.status === 'راجع').length, sales = allOrders.filter(o => o.status === 'واصل').reduce((s, o) => s + (o.total || 0), 0);
-  document.getElementById('statOrders').textContent = total; document.getElementById('statSales').textContent = sales.toLocaleString('ar-IQ'); document.getElementById('statDelivered').textContent = delivered; document.getElementById('statReturned').textContent = returned;
+  const total = allOrders.length;
+  const delivered = allOrders.filter(o => o.status === 'واصل').length;
+  const returned = allOrders.filter(o => o.status === 'راجع').length;
+  const cancelled = allOrders.filter(o => o.status === 'ملغي').length;
+  
+  document.getElementById('statOrders').textContent = total;
+  document.getElementById('statDelivered').textContent = delivered;
+  document.getElementById('statReturned').textContent = returned;
+  document.getElementById('statCancelled').textContent = cancelled;
+  
   const recent = [...allOrders].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
   const container = document.getElementById('recentOrdersList');
-  if (container) { if (!recent.length) container.innerHTML = '<div class="p-8 text-center text-slate-600">📭 لا توجد طلبات</div>'; else container.innerHTML = recent.map(o => `<div class="flex justify-between px-4 py-3 border-b border-slate-800"><div><p>${escapeHtml(o.customer_name)}</p><p class="text-xs text-slate-500">${escapeHtml(o.product)} · ${escapeHtml(o.agent_name)}</p></div><div class="flex gap-3"><span>${(o.total||0).toLocaleString('ar-IQ')} د.ع</span><span class="px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}">${o.status}</span></div></div>`).join(''); }
+  if (container) { 
+    if (!recent.length) container.innerHTML = '<div class="p-8 text-center text-slate-600">📭 لا توجد طلبات</div>'; 
+    else container.innerHTML = recent.map(o => `<div class="flex justify-between px-4 py-3 border-b border-slate-800"><div><p>${escapeHtml(o.customer_name)}</p><p class="text-xs text-slate-500">${escapeHtml(o.product)} · ${escapeHtml(o.agent_name)}</p></div><div class="flex gap-3"><span>${(o.total||0).toLocaleString('ar-IQ')} د.ع</span><span class="px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}">${o.status}</span></div></div>`).join(''); 
+  }
+  
   const agents = {};
-  allOrders.forEach(o => { if (!agents[o.agent_name]) agents[o.agent_name] = { total: 0, delivered: 0, sales: 0 }; agents[o.agent_name].total++; if (o.status === 'واصل') { agents[o.agent_name].delivered++; agents[o.agent_name].sales += (o.total || 0); } });
-  const perfEl = document.getElementById('agentPerformance'); const names = Object.keys(agents);
+  allOrders.forEach(o => { 
+    if (!agents[o.agent_name]) agents[o.agent_name] = { total: 0, delivered: 0, cancelledOrders: 0 }; 
+    agents[o.agent_name].total++; 
+    if (o.status === 'واصل') { agents[o.agent_name].delivered++; }
+    if (o.status === 'ملغي') { agents[o.agent_name].cancelledOrders++; }
+  });
+  const perfEl = document.getElementById('agentPerformance'); 
+  const names = Object.keys(agents);
   if (!names.length) perfEl.innerHTML = '<div class="text-center text-slate-600">📊 أضف طلبات لعرض الأداء</div>';
-  else perfEl.innerHTML = names.map(name => { const a = agents[name]; const rate = a.total ? Math.round((a.delivered / a.total) * 100) : 0; return `<div class="flex justify-between py-2 border-b border-slate-800"><div><p class="font-500">${escapeHtml(name)}</p><p class="text-xs">${a.total} طلب</p></div><div class="text-left"><p class="text-emerald-400">${a.sales.toLocaleString('ar-IQ')} د.ع</p><p class="text-xs">نسبة ${rate}%</p></div></div>`; }).join('');
+  else perfEl.innerHTML = names.map(name => { 
+    const a = agents[name]; 
+    const rate = a.total ? Math.round((a.delivered / a.total) * 100) : 0; 
+    return `<div class="flex justify-between py-2 border-b border-slate-800"><div><p class="font-500">${escapeHtml(name)}</p><p class="text-xs">${a.total} طلب (${a.delivered} واصل)</p></div><div class="text-left"><p class="text-emerald-400">نسبة ${rate}%</p></div></div>`; 
+  }).join('');
 }
 
 function renderOrders() {
@@ -585,27 +783,47 @@ function renderOrders() {
   let filtered = [...allOrders];
   if (statusFilter !== 'all') filtered = filtered.filter(o => o.status === statusFilter);
   if (search) filtered = filtered.filter(o => (o.customer_name||'').toLowerCase().includes(search) || (o.customer_phone||'').includes(search));
+  
+  // ✅ تصفية طلبات اليوم
+  if (todayFilterActive) {
+    const today = new Date().toISOString().split('T')[0];
+    filtered = filtered.filter(o => {
+      const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().split('T')[0] : '');
+      return orderDate === today;
+    });
+    if (filtered.length === 0 && search === '' && statusFilter === 'all') {
+      const container = document.getElementById('ordersTableBody');
+      if (container) container.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات لهذا اليوم</td></tr>';
+      return;
+    }
+  }
+  
   filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const tbody = document.getElementById('ordersTableBody'); if (!tbody) return;
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات<\/td><\/tr>'; return; }
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات</td></tr>'; return; }
   tbody.innerHTML = filtered.map((o, i) => {
     let actionsHtml = '';
-    if (!isAgentMode) actionsHtml = `<button onclick='editOrderProfit("${o.__backendId}")' class="text-blue-400 hover:text-blue-300 transition" title="تعديل الربح"><i data-lucide="pencil" style="width:16px"><\/i><\/button><button onclick='editOrderDate("${o.__backendId}")' class="text-purple-400 hover:text-purple-300 transition" title="تعديل التاريخ"><i data-lucide="calendar" style="width:16px"><\/i><\/button><button onclick='openDeleteConfirm("${o.__backendId}", "order")' class="text-red-400 hover:text-red-300 transition" title="حذف"><i data-lucide="trash-2" style="width:16px"><\/i><\/button>`;
-    else actionsHtml = `<button onclick='editOrderNote("${o.__backendId}")' class="text-green-400 hover:text-green-300 transition" title="تعديل الملاحظة"><i data-lucide="message-circle" style="width:16px"><\/i><\/button>`;
+    if (!isAgentMode) {
+      actionsHtml = `<button onclick='editOrderProfit("${o.__backendId}")' class="text-blue-400 hover:text-blue-300 transition" title="تعديل الربح"><i data-lucide="pencil" style="width:16px"><\/i><\/button><button onclick='editOrderDate("${o.__backendId}")' class="text-purple-400 hover:text-purple-300 transition" title="تعديل التاريخ"><i data-lucide="calendar" style="width:16px"><\/i><\/button><button onclick='openDeleteConfirm("${o.__backendId}", "order")' class="text-red-400 hover:text-red-300 transition" title="حذف"><i data-lucide="trash-2" style="width:16px"><\/i><\/button>`;
+    } else {
+      actionsHtml = `<button onclick='editOrderNote("${o.__backendId}")' class="text-green-400 hover:text-green-300 transition" title="تعديل الملاحظة"><i data-lucide="message-circle" style="width:16px"><\/i><\/button>`;
+    }
     const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().split('T')[0] : ''); const displayDate = orderDate ? orderDate : 'غير محدد';
     const noteText = o.admin_notes || ''; const shortNote = noteText.length > 30 ? noteText.substring(0,30) + '...' : noteText;
     const address = o.customer_address || ''; const shortAddress = address.length > 25 ? address.substring(0,25) + '...' : address;
-    // عرض المنتج مع الكمية والمواد إذا وجدت
     const productDisplay = o.product_info ? `${escapeHtml(o.product_info)}` : `${escapeHtml(o.product)} ×${o.quantity}`;
-    return `<tr class="hover:bg-slate-800/50 transition"><td class="px-4 py-3">${i+1}<\/td><td class="px-4 py-3 font-500">${escapeHtml(o.customer_name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(o.customer_phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(o.customer_phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(address)}")' title="انقر لنسخ العنوان">📍 ${shortAddress || '-'}<\/span><\/td><td class="px-4 py-3">${productDisplay}<\/td><td class="px-4 py-3 font-700">${(o.total||0).toLocaleString('ar-IQ')}<\/td><td class="px-4 py-3 font-700 text-amber-400">${(o.profit||0).toLocaleString('ar-IQ')} د.ع<\/td><td class="px-4 py-3 font-500 text-blue-400">${escapeHtml(o.agent_name || 'مندوب')}<\/td><td class="px-4 py-3 font-500 text-slate-300"><span class="cursor-pointer hover:text-amber-400 transition" onclick='editOrderDate("${o.__backendId}")' title="انقر لتعديل التاريخ">📅 ${displayDate}<\/span><\/td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}" ${!isAgentMode ? `style="cursor:pointer" onclick='openStatusModal("${o.__backendId}")'` : ''}>${o.status}<\/span><\/td><td class="px-4 py-3 text-slate-400 max-w-[200px]"><span class="clickable-note" onclick='showFullNote("${escapeHtml(noteText).replace(/"/g, '&quot;')}", "${escapeHtml(o.customer_name)}")' title="انقر لعرض الملاحظة كاملة">${shortNote || '-'}<\/span><\/td><td class="px-4 py-3 flex gap-3">${actionsHtml}<\/td><\/tr>`;
+    let statusClass = `status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}`;
+    return `<tr class="hover:bg-slate-800/50 transition"><td class="px-4 py-3">${i+1}<\/td><td class="px-4 py-3 font-500">${escapeHtml(o.customer_name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(o.customer_phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(o.customer_phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(address)}")' title="انقر لنسخ العنوان">📍 ${shortAddress || '-'}<\/span><\/td><td class="px-4 py-3">${productDisplay}<\/td><td class="px-4 py-3 font-700">${(o.total||0).toLocaleString('ar-IQ')}<\/td><td class="px-4 py-3 font-700 text-amber-400">${(o.profit||0).toLocaleString('ar-IQ')} د.ع<\/td><td class="px-4 py-3 font-500 text-blue-400">${escapeHtml(o.agent_name || 'مندوب')}<\/td><td class="px-4 py-3 font-500 text-slate-300"><span class="cursor-pointer hover:text-amber-400 transition" onclick='editOrderDate("${o.__backendId}")' title="انقر لتعديل التاريخ">📅 ${displayDate}<\/span><\/td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs ${statusClass} cursor-pointer hover:opacity-80 transition" onclick='openStatusModal("${o.__backendId}")' title="انقر لتغيير الحالة">${o.status}<\/span><\/td><td class="px-4 py-3 text-slate-400 max-w-[200px]"><span class="clickable-note" onclick='showFullNote("${escapeHtml(noteText).replace(/"/g, '&quot;')}", "${escapeHtml(o.customer_name)}")' title="انقر لعرض الملاحظة كاملة">${shortNote || '-'}<\/span><\/td><td class="px-4 py-3 flex gap-3">${actionsHtml}<\/td><\/tr>`;
   }).join('');
-  lucide.createIcons();
+  if (typeof lucide !== 'undefined') lucide.createIcons();
 }
+
 function showFullNote(note, customerName) {
   const modal = document.createElement('div'); modal.className = 'fixed inset-0 z-[200] flex items-center justify-center p-4'; modal.style.backgroundColor = 'rgba(0,0,0,0.7)'; modal.style.backdropFilter = 'blur(8px)';
   modal.innerHTML = `<div class="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-amber-500/30 animate-fade-in-up"><div class="text-center"><i data-lucide="message-circle" style="width:48px;height:48px;color:#f59e0b" class="mx-auto mb-3"></i><h3 class="text-xl font-bold text-amber-400 mb-2">📌 ملاحظة الطلب</h3><p class="text-slate-400 text-sm mb-4">للزبون: ${escapeHtml(customerName)}</p><div class="bg-slate-800/50 rounded-lg p-4 text-right whitespace-pre-wrap break-words max-h-96 overflow-auto">${escapeHtml(note) || '<span class="text-slate-500">لا توجد ملاحظات</span>'}</div><button onclick="this.closest('.fixed').remove()" class="mt-6 w-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-2"><i data-lucide="x" style="width:18px;height:18px"></i> إغلاق</button></div></div>`;
-  document.body.appendChild(modal); lucide.createIcons(); modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal); if (typeof lucide !== 'undefined') lucide.createIcons(); modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
+
 function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
 
 function renderAgents() {
@@ -613,25 +831,32 @@ function renderAgents() {
   if (!allAgents.length) { container.innerHTML = '<div class="col-span-full text-center py-12 text-slate-500">👥 لا توجد مندوبين</div>'; return; }
   container.innerHTML = allAgents.map(agent => {
     const agentOrders = allOrders.filter(o => (o.agent_name || '').trim() === agent.agent_name);
-    const delivered = agentOrders.filter(o => o.status === 'واصل').length; const returned = agentOrders.filter(o => o.status === 'راجع').length;
-    const sales = agentOrders.filter(o => o.status === 'واصل').reduce((s, o) => s + (o.total || 0), 0);
+    const delivered = agentOrders.filter(o => o.status === 'واصل').length;
+    const returned = agentOrders.filter(o => o.status === 'راجع').length;
     const profit = agentOrders.filter(o => o.status === 'واصل').reduce((s, o) => s + (o.profit || 0), 0);
     const agentProfitPerOrder = agent.agent_profit_per_order || DEFAULT_AGENT_PROFIT;
-    return `<div class="bg-slate-900 border border-slate-800 rounded-xl p-5 agent-card hover:border-amber-500/50 transition" onclick='openEditAgentModal("${agent.__backendId}")'><div class="flex justify-between mb-4"><div><p class="font-700 text-amber-400 text-lg">${escapeHtml(agent.agent_name)}</p><p class="text-xs text-slate-500 mt-1">📞 ${escapeHtml(agent.agent_phone)}</p><p class="text-xs text-slate-500">🔑 كود: ${escapeHtml(agent.agent_code)}</p></div><div class="flex gap-2" onclick="event.stopPropagation()"><button onclick='editAgent("${agent.__backendId}")' class="p-1.5 hover:bg-blue-500/20 rounded-lg transition text-blue-400"><i data-lucide="pencil" style="width:16px"><\/i><\/button><button onclick='openDeleteConfirm("${agent.__backendId}", "agent")' class="p-1.5 hover:bg-red-500/20 rounded-lg transition text-red-400"><i data-lucide="trash-2" style="width:16px"><\/i><\/button></div></div><div class="grid grid-cols-3 gap-2 text-center text-xs mt-4"><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-emerald-400 text-lg font-bold">${delivered}</p><p>واصل</p></div><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-red-400 text-lg font-bold">${returned}</p><p>مرتجع</p></div><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-blue-400 text-lg font-bold">${agentOrders.length}</p><p>طلبات</p></div></div><div class="mt-4 pt-3 border-t border-slate-800"><p class="text-sm">💰 المبيعات: <span class="text-emerald-400">${sales.toLocaleString('ar-IQ')} د.ع</span></p><p class="text-sm mt-1">💵 الأرباح: <span class="text-amber-400">${profit.toLocaleString('ar-IQ')} د.ع</span></p><p class="text-sm mt-1">💰 الربح/طلب: <span class="text-blue-400">${agentProfitPerOrder} د.ع</span></p></div><\/div>`;
+    return `<div class="bg-slate-900 border border-slate-800 rounded-xl p-5 agent-card hover:border-amber-500/50 transition" onclick='openEditAgentModal("${agent.__backendId}")'><div class="flex justify-between mb-4"><div><p class="font-700 text-amber-400 text-lg">${escapeHtml(agent.agent_name)}</p><p class="text-xs text-slate-500 mt-1">📞 ${escapeHtml(agent.agent_phone)}</p><p class="text-xs text-slate-500">🔑 كود: ${escapeHtml(agent.agent_code)}</p></div><div class="flex gap-2" onclick="event.stopPropagation()"><button onclick='editAgent("${agent.__backendId}")' class="p-1.5 hover:bg-blue-500/20 rounded-lg transition text-blue-400"><i data-lucide="pencil" style="width:16px"><\/i><\/button><button onclick='openSettleAgentModal("${agent.__backendId}")' class="p-1.5 hover:bg-emerald-500/20 rounded-lg transition text-emerald-400" title="تسديد أرباح المندوب"><i data-lucide="wallet" style="width:16px"><\/i><\/button><button onclick='openDeleteConfirm("${agent.__backendId}", "agent")' class="p-1.5 hover:bg-red-500/20 rounded-lg transition text-red-400"><i data-lucide="trash-2" style="width:16px"><\/i><\/button></div></div><div class="grid grid-cols-3 gap-2 text-center text-xs mt-4"><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-emerald-400 text-lg font-bold">${delivered}</p><p>واصل</p></div><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-red-400 text-lg font-bold">${returned}</p><p>مرتجع</p></div><div class="bg-slate-800/50 rounded-lg p-2"><p class="text-blue-400 text-lg font-bold">${agentOrders.length}</p><p>طلبات</p></div></div><div class="mt-4 pt-3 border-t border-slate-800"><p class="text-sm">💵 الأرباح: <span class="text-amber-400">${profit.toLocaleString('ar-IQ')} د.ع</span></p><p class="text-sm mt-1">💰 الربح/طلب: <span class="text-blue-400">${agentProfitPerOrder} د.ع</span></p></div><\/div>`;
   }).join('');
-  lucide.createIcons();
+  if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
 function openEditAgentModal(id) { const agent = allAgents.find(a => a.__backendId === id); if (!agent) return; currentEditAgent = agent; document.getElementById('editAgentId').textContent = agent.agent_code || '-'; document.getElementById('editAgentName').textContent = agent.agent_name; document.getElementById('editAgentCode').textContent = agent.agent_code; document.getElementById('editAgentProfit').value = agent.agent_profit_per_order || DEFAULT_AGENT_PROFIT; document.getElementById('editAgentModal').classList.remove('hidden'); }
 function closeEditAgentModal() { document.getElementById('editAgentModal').classList.add('hidden'); currentEditAgent = null; }
 async function saveEditAgent() { if (!currentEditAgent) return; const newProfit = parseFloat(document.getElementById('editAgentProfit').value) || DEFAULT_AGENT_PROFIT; const updatedAgent = { ...currentEditAgent, agent_profit_per_order: newProfit }; const result = await window.dataSdk.update(updatedAgent); if (result.isOk) { closeEditAgentModal(); showToast('✅ تم تحديث ربح المندوب'); } else showToast('❌ حدث خطأ'); }
+
 function renderAgentsStats() {
   const agents = {};
-  allOrders.forEach(o => { if (!agents[o.agent_name]) agents[o.agent_name] = { delivered: 0, returned: 0, sales: 0 }; if (o.status === 'واصل') { agents[o.agent_name].delivered++; agents[o.agent_name].sales += (o.total || 0); } if (o.status === 'راجع') agents[o.agent_name].returned++; });
+  allOrders.forEach(o => { 
+    if (!agents[o.agent_name]) agents[o.agent_name] = { delivered: 0, returned: 0, cancelled: 0 }; 
+    if (o.status === 'واصل') agents[o.agent_name].delivered++; 
+    if (o.status === 'راجع') agents[o.agent_name].returned++;
+    if (o.status === 'ملغي') agents[o.agent_name].cancelled++;
+  });
   const el = document.getElementById('agentStatsContainer'); if (!el) return; const names = Object.keys(agents);
   if (!names.length) { el.innerHTML = '<div class="text-center text-slate-600 p-8">📊 أضف طلبات لعرض الإحصائيات</div>'; return; }
-  el.innerHTML = names.map(name => `<div class="bg-slate-800/50 rounded-xl p-4"><p class="font-700 mb-3 text-amber-400">${escapeHtml(name)}</p><div class="grid grid-cols-3 gap-2 text-center"><div class="bg-slate-900/50 rounded-lg p-2"><p class="text-emerald-400 text-xl font-bold">${agents[name].delivered}</p><p class="text-xs">واصل</p></div><div class="bg-slate-900/50 rounded-lg p-2"><p class="text-red-400 text-xl font-bold">${agents[name].returned}</p><p class="text-xs">مرتجع</p></div><div class="bg-slate-900/50 rounded-lg p-2"><p class="text-amber-400 text-xl font-bold">${agents[name].sales.toLocaleString('ar-IQ')}</p><p class="text-xs">مبيعات</p></div></div><\/div>`).join('');
+  el.innerHTML = names.map(name => `<div class="bg-slate-800/50 rounded-xl p-4"><p class="font-700 mb-3 text-amber-400">${escapeHtml(name)}</p><div class="grid grid-cols-3 gap-2 text-center"><div class="bg-slate-900/50 rounded-lg p-2"><p class="text-emerald-400 text-xl font-bold">${agents[name].delivered}</p><p class="text-xs">واصل</p></div><div class="bg-slate-900/50 rounded-lg p-2"><p class="text-red-400 text-xl font-bold">${agents[name].returned}</p><p class="text-xs">مرتجع</p></div><div class="bg-slate-900/50 rounded-lg p-2"><p class="text-purple-400 text-xl font-bold">${agents[name].cancelled}</p><p class="text-xs">ملغي</p></div></div><\/div>`).join('');
 }
+
 function showNewAgentModal() { editingAgentId = null; document.getElementById('agentModalTitle').textContent = '➕ إضافة مندوب'; document.getElementById('agentForm').reset(); document.getElementById('agent_profit_per_order').value = DEFAULT_AGENT_PROFIT; document.getElementById('agentModal').classList.remove('hidden'); }
 function editAgent(id) { event.stopPropagation(); const agent = allAgents.find(a => a.__backendId === id); if (!agent) return; editingAgentId = id; document.getElementById('agentModalTitle').textContent = '✏️ تعديل مندوب'; document.getElementById('agent_name').value = agent.agent_name; document.getElementById('agent_phone').value = agent.agent_phone; document.getElementById('agent_code').value = agent.agent_code || ''; document.getElementById('agent_password').value = agent.agent_password || ''; document.getElementById('agent_profit_per_order').value = agent.agent_profit_per_order || DEFAULT_AGENT_PROFIT; document.getElementById('agentModal').classList.remove('hidden'); }
 function closeAgentModal() { document.getElementById('agentModal').classList.add('hidden'); editingAgentId = null; }
@@ -642,18 +867,18 @@ function renderCustomers() {
   allOrders.forEach(o => { const key = o.customer_phone; if (!customers[key]) customers[key] = { name: o.customer_name, phone: o.customer_phone, address: o.customer_address, orders: 0, total: 0 }; customers[key].orders++; if (o.status === 'واصل') customers[key].total += (o.total || 0); });
   const el = document.getElementById('customersDetail'); if (!el) return; const keys = Object.keys(customers);
   if (!keys.length) { el.innerHTML = '<div class="text-center text-slate-600 p-8">👥 لا يوجد عملاء</div>'; return; }
-  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
+  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th><tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
 }
 
 function renderInventory() {
   const products = {};
-  allOrders.forEach(o => { if (!products[o.product]) products[o.product] = { sold: 0, returned: 0, product_name: o.product }; if (o.status === 'واصل') products[o.product].sold += (o.quantity || 1); if (o.status === 'راجع') products[o.product].returned += (o.quantity || 1); });
+  allOrders.forEach(o => { if (!products[o.product]) products[o.product] = { sold: 0, returned: 0, cancelled: 0, product_name: o.product }; if (o.status === 'واصل') products[o.product].sold += (o.quantity || 1); if (o.status === 'راجع') products[o.product].returned += (o.quantity || 1); if (o.status === 'ملغي') products[o.product].cancelled += (o.quantity || 1); });
   const container = document.getElementById('inventoryList'); const emptyDiv = document.getElementById('inventoryEmpty');
   if (!container) return; const names = Object.keys(products);
   if (!names.length) { container.innerHTML = ''; if (emptyDiv) emptyDiv.classList.remove('hidden'); return; }
   if (emptyDiv) emptyDiv.classList.add('hidden');
-  container.innerHTML = names.map(name => { const p = products[name]; const total = p.sold + p.returned; return `<div class="inventory-item bg-slate-800/50 rounded-lg p-3 flex justify-between items-center hover:bg-slate-700/50 transition"><div class="flex-1"><p class="font-500 text-white">${escapeHtml(name)}</p><div class="flex gap-4 mt-1 text-xs"><span class="text-emerald-400">📤 مباع: ${p.sold}</span><span class="text-red-400">📥 مرتجع: ${p.returned}</span><span class="text-slate-500">📦 الإجمالي: ${total}</span></div></div><div class="inventory-actions flex gap-2"><button onclick="clearProduct('${escapeHtml(name).replace(/'/g, "\\'")}')" class="text-red-400 hover:text-red-300 transition p-1" title="مسح المنتج"><i data-lucide="trash-2" style="width:18px;height:18px"></i></button></div></div>`; }).join('');
-  lucide.createIcons();
+  container.innerHTML = names.map(name => { const p = products[name]; const total = p.sold + p.returned + p.cancelled; return `<div class="inventory-item bg-slate-800/50 rounded-lg p-3 flex justify-between items-center hover:bg-slate-700/50 transition"><div class="flex-1"><p class="font-500 text-white">${escapeHtml(name)}</p><div class="flex gap-4 mt-1 text-xs"><span class="text-emerald-400">📤 مباع: ${p.sold}</span><span class="text-red-400">📥 مرتجع: ${p.returned}</span><span class="text-purple-400">❌ ملغي: ${p.cancelled}</span><span class="text-slate-500">📦 الإجمالي: ${total}</span></div></div><div class="inventory-actions flex gap-2"><button onclick="clearProduct('${escapeHtml(name).replace(/'/g, "\\'")}')" class="text-red-400 hover:text-red-300 transition p-1" title="مسح المنتج"><i data-lucide="trash-2" style="width:18px;height:18px"></i></button></div></div>`; }).join('');
+  if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
 function clearProduct(productName) {
@@ -688,18 +913,24 @@ function renderReports() {
   const totalSales = delivered.reduce((s, o) => s + (o.total || 0), 0);
   const returned = allOrders.filter(o => o.status === 'راجع');
   const returnedValue = returned.reduce((s, o) => s + (o.total || 0), 0);
+  const cancelled = allOrders.filter(o => o.status === 'ملغي');
+  const cancelledValue = cancelled.reduce((s, o) => s + (o.total || 0), 0);
+  
   const summary = document.getElementById('reportSummary');
-  if (summary) summary.innerHTML = `<div class="space-y-2"><div class="flex justify-between py-2 border-b border-slate-800"><span>📊 إجمالي الطلبات</span><span class="font-bold">${allOrders.length}</span></div><div class="flex justify-between py-2 border-b border-slate-800"><span>✅ الواصلة</span><span class="text-emerald-400 font-bold">${delivered.length}</span></div><div class="flex justify-between py-2 border-b border-slate-800"><span>❌ المرتجعة</span><span class="text-red-400 font-bold">${returned.length}</span></div><div class="flex justify-between py-2 border-b border-slate-800"><span>💰 المبيعات</span><span class="text-emerald-400 font-bold">${totalSales.toLocaleString('ar-IQ')} د.ع</span></div><div class="flex justify-between py-2"><span>🔄 المرتجعات</span><span class="text-red-400 font-bold">${returnedValue.toLocaleString('ar-IQ')} د.ع</span></div><\/div>`;
+  if (summary) summary.innerHTML = `<div class="space-y-2"><div class="flex justify-between py-2 border-b border-slate-800"><span>📊 إجمالي الطلبات</span><span class="font-bold">${allOrders.length}</span></div><div class="flex justify-between py-2 border-b border-slate-800"><span>✅ الواصلة</span><span class="text-emerald-400 font-bold">${delivered.length}</span></div><div class="flex justify-between py-2 border-b border-slate-800"><span>❌ المرتجعة</span><span class="text-red-400 font-bold">${returned.length}</span></div><div class="flex justify-between py-2 border-b border-slate-800"><span>❌ الملغية</span><span class="text-purple-400 font-bold">${cancelled.length}</span></div><div class="flex justify-between py-2 border-b border-slate-800"><span>💰 المبيعات</span><span class="text-emerald-400 font-bold">${totalSales.toLocaleString('ar-IQ')} د.ع</span></div><div class="flex justify-between py-2"><span>🔄 المرتجعات</span><span class="text-red-400 font-bold">${returnedValue.toLocaleString('ar-IQ')} د.ع</span></div><div class="flex justify-between py-2"><span>❌ الملغيات</span><span class="text-purple-400 font-bold">${cancelledValue.toLocaleString('ar-IQ')} د.ع</span></div><\/div>`;
+  
   const products = {};
   delivered.forEach(o => { if (!products[o.product]) products[o.product] = { qty: 0, revenue: 0 }; products[o.product].qty += (o.quantity || 1); products[o.product].revenue += (o.total || 0); });
   const sorted = Object.entries(products).sort((a, b) => b[1].revenue - a[1].revenue);
   const productsEl = document.getElementById('reportProducts');
   if (productsEl) productsEl.innerHTML = sorted.length ? sorted.slice(0, 10).map(([name, p]) => `<div class="flex justify-between py-2 border-b border-slate-800"><span>${escapeHtml(name)}</span><span class="text-emerald-400">${p.qty} × ${p.revenue.toLocaleString('ar-IQ')} د.ع</span></div>`).join('') : '<p class="text-center text-slate-500 py-4">لا توجد بيانات</p>';
+  
   const agents = {};
   delivered.forEach(o => { if (!agents[o.agent_name]) agents[o.agent_name] = { delivered: 0, sales: 0 }; agents[o.agent_name].delivered++; agents[o.agent_name].sales += (o.total || 0); });
   const agentsEl = document.getElementById('reportAgents');
   if (agentsEl) agentsEl.innerHTML = Object.keys(agents).length ? Object.entries(agents).map(([name, a]) => `<div class="flex justify-between py-2 border-b border-slate-800"><span class="font-500">${escapeHtml(name)}</span><span class="text-emerald-400">${a.sales.toLocaleString('ar-IQ')} د.ع</span></div>`).join('') : '<p class="text-center text-slate-500 py-4">لا توجد بيانات</p>';
 }
+
 function exportCSV() { if (!allOrders.length) { showToast('لا توجد بيانات'); return; } const headers = ['الزبون','الهاتف','العنوان','المنتج','الكمية','السعر','الإجمالي','المندوب','التاريخ','الحالة','الملاحظات']; const rows = allOrders.map(o => [o.customer_name, o.customer_phone, o.customer_address, o.product_info || o.product, o.quantity, o.price, o.total, o.agent_name, o.order_date || '', o.status, o.admin_notes || '']); const csv = '\uFEFF' + [headers, ...rows].map(r => r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'orders.csv'; a.click(); showToast('📥 تم التصدير'); }
 
 function showNewOrderModal() { 
@@ -709,7 +940,6 @@ function showNewOrderModal() {
     const today = new Date().toISOString().split('T')[0]; 
     document.getElementById('f_date').value = today; 
     loadGovernorates();
-    createFlowersFromTop(); 
 }
 function closeOrderModal() { document.getElementById('orderModal').classList.add('hidden'); }
 
@@ -721,13 +951,12 @@ async function handleOrderSubmit(e) {
   
   const qty = parseInt(document.getElementById('f_qty').value) || 1; 
   const price = parseFloat(document.getElementById('f_price').value) || 0; 
-  // ✅ السعر ثابت لا يضرب في الكمية
   const total = price;
   const governorate = document.getElementById('f_governorate').value;
   const district = document.getElementById('f_district').value;
-  const fullAddress = `${governorate} - ${district}`;
+  const landmark = document.getElementById('f_landmark').value.trim();
+  const fullAddress = landmark ? `${governorate} - ${district} (قرب: ${landmark})` : `${governorate} - ${district}`;
   const productName = document.getElementById('f_product').value.trim();
-  // ✅ إنشاء حقل المواد مع الكمية
   const productInfo = qty > 1 ? `${productName} ×${qty}` : productName;
   
   let agentName = 'مندوب';
@@ -749,6 +978,7 @@ async function handleOrderSubmit(e) {
     customer_address: fullAddress,
     governorate: governorate,
     district: district,
+    landmark: landmark,
     product: productName,
     product_info: productInfo,
     quantity: qty, 
@@ -828,27 +1058,117 @@ function openDeleteConfirm(id, type) {
 function closeDeleteConfirm() { document.getElementById('deleteConfirm').classList.add('hidden'); pendingDeleteRecord = null; }
 async function confirmDelete() { 
   if (!pendingDeleteRecord) return; 
-  if (pendingDeleteRecord.__backendId && pendingDeleteRecord.type !== 'agent') await deleteFromJenni(pendingDeleteRecord.__backendId);
-  const result = await window.dataSdk.delete(pendingDeleteRecord); 
-  closeDeleteConfirm(); 
-  showToast(result.isOk ? '✅ تم الحذف' : '❌ حدث خطأ'); 
+  const deleteBtn = document.getElementById('confirmDeleteBtn');
+  if (deleteBtn) { deleteBtn.textContent = 'جاري...'; deleteBtn.disabled = true; }
+  
+  try {
+    if (pendingDeleteRecord.__backendId && pendingDeleteRecord.type !== 'agent') {
+      showToast('🔄 جاري معالجة الطلب في الزعيم...');
+      await deleteFromJenni(pendingDeleteRecord.__backendId);
+    }
+    const result = await window.dataSdk.delete(pendingDeleteRecord); 
+    closeDeleteConfirm(); 
+    showToast(result.isOk ? '✅ تم الحذف' : '❌ حدث خطأ'); 
+  } catch (error) {
+    showToast('❌ حدث خطأ');
+  } finally {
+    if (deleteBtn) { deleteBtn.textContent = 'حذف'; deleteBtn.disabled = false; }
+  }
 }
 
 function openStatusModal(id) { 
-  if (isAgentMode) { showToast('🔒 غير مسموح للمندوبين'); return; } 
-  pendingStatusRecord = allOrders.find(o => o.__backendId === id); 
-  if (!pendingStatusRecord) { showToast('❌ حدث خطأ'); return; } 
-  const statuses = ['جديد', 'قيد التوصيل', 'واصل', 'راجع']; 
-  document.getElementById('statusOptions').innerHTML = statuses.map(s => `<button onclick="changeStatus('${s}')" class="w-full text-right px-4 py-2 rounded-lg hover:bg-slate-800 transition ${pendingStatusRecord.status === s ? 'bg-slate-800 text-amber-400' : ''}">${s}</button>`).join(''); 
-  document.getElementById('statusModal').classList.remove('hidden'); 
+  const order = allOrders.find(o => o.__backendId === id); 
+  if (!order) { showToast('❌ حدث خطأ'); return; }
+  pendingStatusRecord = order;
+  
+  let statuses = [];
+  if (isAgentMode && currentUser && currentUser.type !== 'admin') {
+    statuses = ['قيد التوصيل', 'راجع', 'ملغي'];
+  } else {
+    statuses = ['جديد', 'قيد التوصيل', 'واصل', 'راجع', 'ملغي'];
+  }
+  
+  const statusOptionsHtml = statuses.map(s => `
+    <button onclick="changeStatus('${s}')" 
+            class="w-full text-right px-4 py-3 rounded-lg hover:bg-slate-800 transition mb-2 
+                   ${pendingStatusRecord.status === s ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50' : 'bg-slate-800/50'}"
+            style="font-size: 16px;">
+        <div class="flex justify-between items-center">
+            <span>${s === 'قيد التوصيل' ? '🚚 ' + s : s === 'واصل' ? '✅ ' + s : s === 'راجع' ? '↩️ ' + s : s === 'ملغي' ? '❌ ' + s : '📋 ' + s}</span>
+            ${pendingStatusRecord.status === s ? '<i data-lucide="check" style="width:18px;height:18px"></i>' : ''}
+        </div>
+    </button>
+  `).join('');
+  
+  const modalContent = `
+    <div class="mb-4 p-3 bg-slate-800/50 rounded-lg">
+        <p class="text-slate-400 text-sm">👤 الزبون</p>
+        <p class="font-bold text-white">${escapeHtml(order.customer_name)}</p>
+        <p class="text-slate-400 text-sm mt-2">📦 المنتج</p>
+        <p class="text-white">${escapeHtml(order.product_info || order.product)}</p>
+        <p class="text-slate-400 text-sm mt-2">💰 المبلغ</p>
+        <p class="text-emerald-400">${(order.total || 0).toLocaleString('ar-IQ')} د.ع</p>
+        <p class="text-slate-400 text-sm mt-2">📌 الحالة الحالية</p>
+        <p class="text-amber-400">${order.status}</p>
+    </div>
+    <div class="space-y-2">
+        ${statusOptionsHtml}
+    </div>
+  `;
+  
+  document.getElementById('statusModalContent').innerHTML = modalContent;
+  document.getElementById('dynamicStatusModal').classList.remove('hidden');
+  if (typeof lucide !== 'undefined') lucide.createIcons();
 }
-function closeStatusModal() { document.getElementById('statusModal').classList.add('hidden'); pendingStatusRecord = null; }
+
+function closeStatusModal() { 
+  document.getElementById('dynamicStatusModal').classList.add('hidden'); 
+  pendingStatusRecord = null; 
+}
+
 async function changeStatus(newStatus) { 
-  if (!pendingStatusRecord) { showToast('❌ حدث خطأ'); closeStatusModal(); return; } 
-  const result = await window.dataSdk.update({ ...pendingStatusRecord, status: newStatus }); 
-  closeStatusModal(); 
-  if (!isAgentMode && currentUser && pendingStatusRecord) addNotification('تغيير حالة', `تم تغيير حالة طلب ${pendingStatusRecord.customer_name} إلى ${newStatus}`, 'status', pendingStatusRecord.__backendId);
-  showToast(result.isOk ? `✅ تم التغيير إلى ${newStatus}` : '❌ حدث خطأ'); 
+  if (!pendingStatusRecord) { 
+    showToast('❌ حدث خطأ'); 
+    closeStatusModal(); 
+    return; 
+  }
+  
+  const order = pendingStatusRecord;
+  const oldStatus = order.status;
+  
+  if (oldStatus === newStatus) {
+    closeStatusModal();
+    return;
+  }
+  
+  showToast(`🔄 جاري تغيير الحالة إلى ${newStatus}...`);
+  
+  try {
+    if (newStatus === 'ملغي' && order.__backendId) {
+      console.log(`📝 محاولة إلغاء الطلب ${order.__backendId} في نظام الزعيم...`);
+      const cancelSuccess = await cancelInJenni(order.__backendId, `تم إلغاء الطلب من قبل ${isAgentMode ? 'المندوب' : 'المدير'}`);
+      if (cancelSuccess) {
+        showToast('✅ تم إلغاء الطلب في نظام الزعيم');
+      } else {
+        showToast('⚠️ تم تغيير الحالة محلياً فقط (فشل الاتصال بالزعيم)');
+      }
+    }
+    
+    const result = await window.dataSdk.update({ ...order, status: newStatus }); 
+    closeStatusModal(); 
+    
+    if (result.isOk) {
+      showToast(`✅ تم تغيير الحالة من ${oldStatus} إلى ${newStatus}`);
+      addNotification('تغيير حالة', `تم تغيير حالة طلب ${order.customer_name} من ${oldStatus} إلى ${newStatus}`, 'status', order.__backendId);
+      setTimeout(() => { if (window.dataSdk && window.dataSdk.loadData) window.dataSdk.loadData(); }, 500);
+    } else {
+      showToast('❌ حدث خطأ في تحديث الحالة');
+    }
+  } catch (error) {
+    console.error('خطأ في تغيير الحالة:', error);
+    showToast('❌ حدث خطأ أثناء تغيير الحالة');
+    closeStatusModal();
+  }
 }
 
 function editOrderProfit(id) { 
@@ -877,7 +1197,6 @@ function showToast(msg) {
   setTimeout(() => toast.classList.add('hidden'), 2500); 
 }
 
-// ============== التحقق من حالة تسجيل الدخول ==============
 if (loadLoginState()) {
     console.log("🔄 استعادة جلسة سابقة");
     showApp();
@@ -888,7 +1207,19 @@ if (loadLoginState()) {
 }
 
 loadNotificationsFromStorage();
-lucide.createIcons();
+if (typeof lucide !== 'undefined') lucide.createIcons();
+
+async function syncCancelledFromJenni() {
+    try {
+        const response = await fetch('/api/sync-cancelled-from-jenni', { method: 'POST' });
+        const result = await response.json();
+        if (result.success && result.updated_count > 0) {
+            console.log(`🔄 تم مزامنة ${result.updated_count} طلب ملغي من الزعيم`);
+            if (window.dataSdk && window.dataSdk.loadData) window.dataSdk.loadData();
+        }
+    } catch (error) { console.error('خطأ في مزامنة الطلبات الملغية:', error); }
+}
+setInterval(syncCancelledFromJenni, 60 * 60 * 1000);
 </script>
 </body>
 </html>
