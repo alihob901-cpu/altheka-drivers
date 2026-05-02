@@ -1,5 +1,4 @@
-﻿تمام عدل الكود وارسله لي بالكامل 
-<!doctype html>
+﻿<!doctype html>
 <html lang="ar" dir="rtl" class="h-full">
 <head>
   <meta charset="UTF-8">
@@ -59,8 +58,6 @@
     .inventory-item:hover .inventory-actions { opacity: 1; }
     .today-btn-active { background-color: #f59e0b; color: #0f172a; }
     .today-btn-inactive { background-color: #1e293b; color: #94a3b8; }
-    .logout-all-btn { background: linear-gradient(135deg, #dc2626, #991b1b); transition: all 0.3s; }
-    .logout-all-btn:hover { transform: scale(1.02); box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3); }
   </style>
 </head>
 <body class="h-full bg-slate-950 text-slate-100">
@@ -84,99 +81,6 @@ const FALLBACK_GOVERNORATES = ['بغداد', 'البصرة', 'نينوى', 'أر
 
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
-
-// ============== نظام إدارة الجلسات ==============
-let currentSessionToken = null;
-let sessionCheckInterval = null;
-
-function generateSessionToken() {
-    return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 16);
-}
-
-function saveSessionToken(token) {
-    if (token) {
-        localStorage.setItem('admin_session_token', token);
-        sessionStorage.setItem('active_session_token', token);
-    }
-}
-
-function getStoredSessionToken() {
-    return localStorage.getItem('admin_session_token');
-}
-
-function getCurrentSessionToken() {
-    return sessionStorage.getItem('active_session_token');
-}
-
-function clearSessionData() {
-    localStorage.removeItem('admin_session_token');
-    sessionStorage.removeItem('active_session_token');
-    localStorage.removeItem('trust_login_state');
-}
-
-async function logoutAllSessions() {
-    if (!confirm('⚠️ تحذير: هذا الإجراء سيسجل خروجك من جميع الأجهزة الأخرى التي تستخدم حساب الادمن.\n\nهل أنت متأكد من رغبتك في تسجيل الخروج من جميع الجلسات؟')) {
-        return;
-    }
-    
-    showToast('🔄 جاري تسجيل الخروج من جميع الجلسات...');
-    
-    try {
-        // إنشاء توكن جديد
-        const newToken = generateSessionToken();
-        
-        // حفظ التوكن الجديد في localStorage (سيتم استخدامه للتحقق من صحة الجلسة)
-        localStorage.setItem('admin_session_token', newToken);
-        
-        // حفظ التوكن الحالي في sessionStorage
-        sessionStorage.setItem('active_session_token', newToken);
-        
-        // تحديث currentSessionToken
-        currentSessionToken = newToken;
-        
-        // تسجيل الخروج من الجلسات الأخرى عن طريق تغيير التوكن
-        // الجلسات الأخرى سيكون لديها توكن قديم مختلف ولن تتمكن من الاستمرار
-        
-        showToast('✅ تم تسجيل الخروج من جميع الجلسات الأخرى');
-        addNotification('🔐 تسجيل خروج الكل', 'تم تسجيل الخروج من جميع الأجهزة الأخرى', 'security');
-        
-    } catch (error) {
-        console.error('❌ خطأ في تسجيل الخروج:', error);
-        showToast('❌ حدث خطأ أثناء تسجيل الخروج');
-    }
-}
-
-// التحقق من صحة الجلسة بشكل دوري
-function startSessionValidation() {
-    if (sessionCheckInterval) clearInterval(sessionCheckInterval);
-    
-    sessionCheckInterval = setInterval(() => {
-        // التحقق فقط إذا كان المستخدم ادمن وليس مندوب
-        if (currentUser && !isAgentMode && currentUser.type === 'admin') {
-            const storedToken = getStoredSessionToken();
-            const currentToken = getCurrentSessionToken();
-            
-            // إذا لم يتطابق التوكن، فهذا يعني أن هناك جلسة أخرى قامت بتسجيل الخروج من الكل
-            if (storedToken && currentToken && storedToken !== currentToken) {
-                console.log('⚠️ تم اكتشاف جلسة أخرى - سيتم تسجيل الخروج');
-                showToast('⚠️ تم تسجيل الخروج من هذه الجلسة بسبب تسجيل الدخول من جهاز آخر');
-                
-                // مسح بيانات الجلسة
-                clearSessionData();
-                currentUser = null;
-                isAgentMode = false;
-                
-                // إخفاء التطبيق وإظهار شاشة login
-                document.getElementById('app').classList.add('hidden');
-                document.getElementById('loginPage').classList.remove('hidden');
-                
-                // إيقاف التحقق
-                if (sessionCheckInterval) clearInterval(sessionCheckInterval);
-                sessionCheckInterval = null;
-            }
-        }
-    }, 3000); // التحقق كل 3 ثواني
-}
 
 async function saveTokenToServer(token) {
     let userId = 'admin';
@@ -212,18 +116,7 @@ async function requestNotificationPermission() {
 }
 
 function saveLoginState() {
-    if (currentUser) {
-        const sessionToken = getCurrentSessionToken() || generateSessionToken();
-        if (!getCurrentSessionToken()) {
-            sessionStorage.setItem('active_session_token', sessionToken);
-        }
-        localStorage.setItem('trust_login_state', JSON.stringify({ 
-            user: currentUser, 
-            isAgentMode: isAgentMode, 
-            timestamp: Date.now(),
-            sessionToken: getCurrentSessionToken()
-        }));
-    }
+    if (currentUser) localStorage.setItem('trust_login_state', JSON.stringify({ user: currentUser, isAgentMode: isAgentMode, timestamp: Date.now() }));
 }
 function loadLoginState() {
     const saved = localStorage.getItem('trust_login_state');
@@ -231,36 +124,15 @@ function loadLoginState() {
         try {
             const loginData = JSON.parse(saved);
             if ((Date.now() - loginData.timestamp) / (1000 * 60 * 60) < 24) {
-                // التحقق من صحة الجلسة
-                const storedToken = getStoredSessionToken();
-                const savedToken = loginData.sessionToken;
-                
-                // إذا كان هناك توكن مخزن في localStorage يختلف عن توكن الجلسة، فهذا يعني أنه تم تسجيل الخروج من الكل
-                if (storedToken && savedToken && storedToken !== savedToken) {
-                    console.log('⚠️ انتهت صلاحية الجلسة - تم تسجيل الخروج من جهاز آخر');
-                    localStorage.removeItem('trust_login_state');
-                    return false;
-                }
-                
                 currentUser = loginData.user;
                 isAgentMode = loginData.isAgentMode;
-                
-                // استعادة التوكن
-                if (loginData.sessionToken) {
-                    sessionStorage.setItem('active_session_token', loginData.sessionToken);
-                    currentSessionToken = loginData.sessionToken;
-                }
-                
                 return true;
             } else localStorage.removeItem('trust_login_state');
         } catch(e) {}
     }
     return false;
 }
-function clearLoginState() { 
-    localStorage.removeItem('trust_login_state'); 
-    clearSessionData();
-}
+function clearLoginState() { localStorage.removeItem('trust_login_state'); }
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => { requestNotificationPermission(); });
@@ -463,10 +335,6 @@ async function confirmSettleAgent() {
         <button id="syncWithJenniBtn" onclick="syncWithJenni()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition hidden">
           <i data-lucide="refresh-cw" style="width:16px;height:16px"></i> مزامنة مع الزعيم
         </button>
-        <!-- زر تسجيل الخروج من جميع الجلسات (يظهر فقط للادمن) -->
-        <button id="logoutAllSessionsBtn" onclick="logoutAllSessions()" class="logout-all-btn text-white px-4 py-2 rounded-lg text-sm font-700 flex items-center gap-2 transition hidden" title="تسجيل الخروج من جميع الأجهزة">
-          <i data-lucide="log-out" style="width:16px;height:16px"></i> خروج الكل
-        </button>
         <button onclick="logout()" class="text-slate-400 hover:text-red-400 p-2 rounded-lg hover:bg-slate-800 transition"> <i data-lucide="log-out" style="width:20px;height:20px"></i> </button>
       </div>
     </header>
@@ -515,7 +383,7 @@ async function confirmSettleAgent() {
         </div>
         <input id="searchOrders" oninput="renderOrders()" type="text" placeholder="بحث بالاسم أو الهاتف..." class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300 w-56">
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody><table></div></div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody></table></div></div>
     </div>
 
     <!-- Agents Page -->
@@ -801,15 +669,7 @@ async function handleLogin(e) {
   await new Promise(resolve => setTimeout(resolve, 300));
   if (username === 'admin' && password === '1234321ali123') {
     currentUser = { type: 'admin', agent_name: 'المدير العام' }; isAgentMode = false;
-    
-    // إنشاء توكن جلسة جديد للادمن
-    const newSessionToken = generateSessionToken();
-    currentSessionToken = newSessionToken;
-    localStorage.setItem('admin_session_token', newSessionToken);
-    sessionStorage.setItem('active_session_token', newSessionToken);
-    
     btn.disabled = false; btn.innerHTML = '<i data-lucide="log-in"></i> دخول'; if (typeof lucide !== 'undefined') lucide.createIcons(); showApp(); saveLoginState(); showToast('مرحباً في لوحة التحكم الإدارية');
-    startSessionValidation(); // بدء التحقق من الجلسة
     const token = localStorage.getItem('fcm_token');
     if (token) await saveTokenToServer(token);
     return;
@@ -834,7 +694,6 @@ function showApp() {
     document.getElementById('inventoryNav').classList.add('hidden'); document.getElementById('reportsNav').classList.add('hidden');
     document.getElementById('settingsNav').classList.add('hidden'); document.getElementById('addOrderBtn').classList.remove('hidden');
     document.getElementById('syncWithJenniBtn').classList.add('hidden');
-    document.getElementById('logoutAllSessionsBtn').classList.add('hidden'); // إخفاء زر خروج الكل للمندوبين
     document.getElementById('userName').textContent = currentUser.agent_name; document.getElementById('userRole').textContent = 'مندوب';
     document.getElementById('userAvatar').textContent = currentUser.agent_name.charAt(0); switchPage('agent-dashboard');
   } else {
@@ -843,25 +702,13 @@ function showApp() {
     document.getElementById('inventoryNav').classList.remove('hidden'); document.getElementById('reportsNav').classList.remove('hidden');
     document.getElementById('settingsNav').classList.remove('hidden'); document.getElementById('addOrderBtn').classList.add('hidden');
     document.getElementById('syncWithJenniBtn').classList.remove('hidden');
-    document.getElementById('logoutAllSessionsBtn').classList.remove('hidden'); // إظهار زر خروج الكل للادمن
     document.getElementById('userName').textContent = 'المدير العام'; document.getElementById('userRole').textContent = 'مسؤول النظام';
     document.getElementById('userAvatar').textContent = 'م'; switchPage('dashboard');
   }
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
-function logout() { 
-  currentUser = null; 
-  isAgentMode = false; 
-  clearLoginState(); 
-  if (sessionCheckInterval) clearInterval(sessionCheckInterval);
-  sessionCheckInterval = null;
-  document.getElementById('app').classList.add('hidden'); 
-  document.getElementById('loginPage').classList.remove('hidden'); 
-  document.getElementById('loginForm').reset(); 
-  showToast('تم تسجيل الخروج'); 
-}
-
+function logout() { currentUser = null; isAgentMode = false; clearLoginState(); document.getElementById('app').classList.add('hidden'); document.getElementById('loginPage').classList.remove('hidden'); document.getElementById('loginForm').reset(); showToast('تم تسجيل الخروج'); }
 function switchPage(page) { closeNotifications(); document.querySelectorAll('.page-content').forEach(el => el.classList.add('hidden')); const target = document.getElementById('page-' + page); if (target) target.classList.remove('hidden'); document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active')); const activeBtn = document.querySelector(`[data-page="${page}"]`); if (activeBtn) activeBtn.classList.add('active'); const titles = { dashboard: 'لوحة التحكم', 'agent-dashboard': 'لوحتي الخاصة', orders: 'الطلبات', agents: 'المندوبين', customers: 'العملاء', inventory: 'المخزن', reports: 'التقارير', settings: 'الإعدادات' }; document.getElementById('pageTitle').textContent = titles[page] || page; }
 function toggleSidebar() { const sidebar = document.getElementById('sidebar'); sidebar.classList.toggle('hidden'); }
 
@@ -946,7 +793,7 @@ function renderOrders() {
     });
     if (filtered.length === 0 && search === '' && statusFilter === 'all') {
       const container = document.getElementById('ordersTableBody');
-      if (container) container.innerHTML = '<table><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات لهذا اليوم</td></tr>';
+      if (container) container.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات لهذا اليوم</td></tr>';
       return;
     }
   }
@@ -1020,7 +867,7 @@ function renderCustomers() {
   allOrders.forEach(o => { const key = o.customer_phone; if (!customers[key]) customers[key] = { name: o.customer_name, phone: o.customer_phone, address: o.customer_address, orders: 0, total: 0 }; customers[key].orders++; if (o.status === 'واصل') customers[key].total += (o.total || 0); });
   const el = document.getElementById('customersDetail'); if (!el) return; const keys = Object.keys(customers);
   if (!keys.length) { el.innerHTML = '<div class="text-center text-slate-600 p-8">👥 لا يوجد عملاء</div>'; return; }
-  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
+  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th><tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
 }
 
 function renderInventory() {
@@ -1353,7 +1200,6 @@ function showToast(msg) {
 if (loadLoginState()) {
     console.log("🔄 استعادة جلسة سابقة");
     showApp();
-    startSessionValidation(); // بدء التحقق من الجلسة
     const token = localStorage.getItem('fcm_token');
     if (token) saveTokenToServer(token);
 } else {
