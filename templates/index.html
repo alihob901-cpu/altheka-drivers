@@ -930,7 +930,7 @@ function renderOrders() {
       // للمدير: زر تعديل كامل + زر حذف
       actionsHtml = `
         <button onclick='openEditOrderModal("${o.__backendId}")' class="text-amber-400 hover:text-amber-300 transition" title="تعديل كامل">
-          <i data-lucide="edit-3" style="width:18px"></i>
+          <i data-lucide="pencil" style="width:18px"></i>
         </button>
         <button onclick='openDeleteConfirm("${o.__backendId}", "order")' class="text-red-400 hover:text-red-300 transition" title="حذف">
           <i data-lucide="trash-2" style="width:16px"></i>
@@ -939,7 +939,7 @@ function renderOrders() {
       // للمندوب: زر تعديل كامل فقط (بدون حذف)
       actionsHtml = `
         <button onclick='openEditOrderModal("${o.__backendId}")' class="text-amber-400 hover:text-amber-300 transition" title="تعديل كامل">
-          <i data-lucide="edit-3" style="width:18px"></i>
+          <i data-lucide="pencil" style="width:18px"></i>
         </button>`;
     }
     const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().split('T')[0] : ''); 
