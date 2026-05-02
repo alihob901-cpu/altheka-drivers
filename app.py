@@ -88,8 +88,8 @@ def get_governorate_code(governorate_name):
         'ديالى': 'DYL',
         'المثنى': 'MTH',
         'القادسية': 'QAD',
-        'السليمانية': 'SMH',  # ✅ تمت الإضافة
-        'دهوك': 'DOH'          # ✅ تمت الإضافة
+        'السليمانية': 'SMH',
+        'دهوك': 'DOH'
     }
     code = governorate_map.get(governorate_name, 'BGD')
     print(f"🗺️ تحويل {governorate_name} -> {code}")
@@ -119,7 +119,7 @@ def jenni_login():
         
         if response.status_code == 200:
             data = response.json()
-            jenni_jwt_token = data.get("token")
+            jenni_jwt_token = data.get("token") or data.get("access_token") or data.get("jwt")
             expires_in = data.get("expires_in", 86400)
             jenni_token_expiry = time.time() + expires_in
             print(f"✅ تم تسجيل الدخول إلى نظام الزعيم بنجاح")
@@ -155,11 +155,17 @@ def create_shipment_in_jenni(order_data):
     governorate_name = order_data.get("governorate", "بغداد")
     governorate_code = get_governorate_code(governorate_name)
     
+    # ✅ معالجة رقم الهاتف - لا يتم استبداله برقم افتراضي أبداً
     phone = order_data.get("customer_phone", "")
+    original_phone = phone
     phone = ''.join(filter(str.isdigit, phone))
+    
+    # ✅ إذا كان الرقم غير صالح، نحتفظ بالرقم الأصلي ولا نستبدله
     if not phone.startswith('07') or len(phone) not in [10, 11]:
-        phone = "07717798622"
-        print(f"⚠️ تم تصحيح رقم الهاتف إلى: {phone}")
+        phone = original_phone
+        print(f"⚠️ تحذير: رقم الهاتف غير قياسي ({original_phone})، سيتم إرساله كما هو")
+    
+    print(f"📞 الرقم المرسل إلى الزعيم: {phone}")
     
     product_info = order_data.get("product_info", "") or order_data.get("product", "")
     quantity = int(order_data.get("quantity", 1))

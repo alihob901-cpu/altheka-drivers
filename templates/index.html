@@ -819,7 +819,7 @@ function renderOrders() {
 }
 
 function showFullNote(note, customerName) {
-  const modal = document.createElement('div'); modal.className = 'fixed inset-0 z-[200] flex items-center justify-center p-4'; modal.style.backgroundColor = 'rgba(0,0,0,0.7)'; modal.style.backdropFilter = 'blur(8px)';
+  const modal = document.createElement('div'); modal.className = 'fixed inset-0 z-[200] flex items-center justify-center p-4'; modal.style.backgroundColor = 'rgba(0,0,0,0.7)';     modal.style.backdropFilter = 'blur(8px)';
   modal.innerHTML = `<div class="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-amber-500/30 animate-fade-in-up"><div class="text-center"><i data-lucide="message-circle" style="width:48px;height:48px;color:#f59e0b" class="mx-auto mb-3"></i><h3 class="text-xl font-bold text-amber-400 mb-2">📌 ملاحظة الطلب</h3><p class="text-slate-400 text-sm mb-4">للزبون: ${escapeHtml(customerName)}</p><div class="bg-slate-800/50 rounded-lg p-4 text-right whitespace-pre-wrap break-words max-h-96 overflow-auto">${escapeHtml(note) || '<span class="text-slate-500">لا توجد ملاحظات</span>'}</div><button onclick="this.closest('.fixed').remove()" class="mt-6 w-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-2.5 rounded-lg font-bold transition flex items-center justify-center gap-2"><i data-lucide="x" style="width:18px;height:18px"></i> إغلاق</button></div></div>`;
   document.body.appendChild(modal); if (typeof lucide !== 'undefined') lucide.createIcons(); modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
@@ -867,7 +867,7 @@ function renderCustomers() {
   allOrders.forEach(o => { const key = o.customer_phone; if (!customers[key]) customers[key] = { name: o.customer_name, phone: o.customer_phone, address: o.customer_address, orders: 0, total: 0 }; customers[key].orders++; if (o.status === 'واصل') customers[key].total += (o.total || 0); });
   const el = document.getElementById('customersDetail'); if (!el) return; const keys = Object.keys(customers);
   if (!keys.length) { el.innerHTML = '<div class="text-center text-slate-600 p-8">👥 لا يوجد عملاء</div>'; return; }
-  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th><tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
+  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
 }
 
 function renderInventory() {
@@ -1060,7 +1060,6 @@ async function confirmDelete() {
   if (!pendingDeleteRecord) return; 
   const deleteBtn = document.getElementById('confirmDeleteBtn');
   if (deleteBtn) { deleteBtn.textContent = 'جاري...'; deleteBtn.disabled = true; }
-  
   try {
     if (pendingDeleteRecord.__backendId && pendingDeleteRecord.type !== 'agent') {
       showToast('🔄 جاري معالجة الطلب في الزعيم...');
@@ -1069,106 +1068,53 @@ async function confirmDelete() {
     const result = await window.dataSdk.delete(pendingDeleteRecord); 
     closeDeleteConfirm(); 
     showToast(result.isOk ? '✅ تم الحذف' : '❌ حدث خطأ'); 
-  } catch (error) {
-    showToast('❌ حدث خطأ');
-  } finally {
-    if (deleteBtn) { deleteBtn.textContent = 'حذف'; deleteBtn.disabled = false; }
-  }
+  } catch (error) { showToast('❌ حدث خطأ'); }
+  finally { if (deleteBtn) { deleteBtn.textContent = 'حذف'; deleteBtn.disabled = false; } }
 }
 
 function openStatusModal(id) { 
   const order = allOrders.find(o => o.__backendId === id); 
   if (!order) { showToast('❌ حدث خطأ'); return; }
   pendingStatusRecord = order;
-  
   let statuses = [];
   if (isAgentMode && currentUser && currentUser.type !== 'admin') {
     statuses = ['قيد التوصيل', 'راجع', 'ملغي'];
   } else {
     statuses = ['جديد', 'قيد التوصيل', 'واصل', 'راجع', 'ملغي'];
   }
-  
   const statusOptionsHtml = statuses.map(s => `
-    <button onclick="changeStatus('${s}')" 
-            class="w-full text-right px-4 py-3 rounded-lg hover:bg-slate-800 transition mb-2 
-                   ${pendingStatusRecord.status === s ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50' : 'bg-slate-800/50'}"
-            style="font-size: 16px;">
-        <div class="flex justify-between items-center">
-            <span>${s === 'قيد التوصيل' ? '🚚 ' + s : s === 'واصل' ? '✅ ' + s : s === 'راجع' ? '↩️ ' + s : s === 'ملغي' ? '❌ ' + s : '📋 ' + s}</span>
-            ${pendingStatusRecord.status === s ? '<i data-lucide="check" style="width:18px;height:18px"></i>' : ''}
-        </div>
+    <button onclick="changeStatus('${s}')" class="w-full text-right px-4 py-3 rounded-lg hover:bg-slate-800 transition mb-2 ${pendingStatusRecord.status === s ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50' : 'bg-slate-800/50'}" style="font-size: 16px;">
+      <div class="flex justify-between items-center"><span>${s === 'قيد التوصيل' ? '🚚 ' + s : s === 'واصل' ? '✅ ' + s : s === 'راجع' ? '↩️ ' + s : s === 'ملغي' ? '❌ ' + s : '📋 ' + s}</span>${pendingStatusRecord.status === s ? '<i data-lucide="check" style="width:18px;height:18px"></i>' : ''}</div>
     </button>
   `).join('');
-  
-  const modalContent = `
-    <div class="mb-4 p-3 bg-slate-800/50 rounded-lg">
-        <p class="text-slate-400 text-sm">👤 الزبون</p>
-        <p class="font-bold text-white">${escapeHtml(order.customer_name)}</p>
-        <p class="text-slate-400 text-sm mt-2">📦 المنتج</p>
-        <p class="text-white">${escapeHtml(order.product_info || order.product)}</p>
-        <p class="text-slate-400 text-sm mt-2">💰 المبلغ</p>
-        <p class="text-emerald-400">${(order.total || 0).toLocaleString('ar-IQ')} د.ع</p>
-        <p class="text-slate-400 text-sm mt-2">📌 الحالة الحالية</p>
-        <p class="text-amber-400">${order.status}</p>
-    </div>
-    <div class="space-y-2">
-        ${statusOptionsHtml}
-    </div>
-  `;
-  
+  const modalContent = `<div class="mb-4 p-3 bg-slate-800/50 rounded-lg"><p class="text-slate-400 text-sm">👤 الزبون</p><p class="font-bold text-white">${escapeHtml(order.customer_name)}</p><p class="text-slate-400 text-sm mt-2">📦 المنتج</p><p class="text-white">${escapeHtml(order.product_info || order.product)}</p><p class="text-slate-400 text-sm mt-2">💰 المبلغ</p><p class="text-emerald-400">${(order.total || 0).toLocaleString('ar-IQ')} د.ع</p><p class="text-slate-400 text-sm mt-2">📌 الحالة الحالية</p><p class="text-amber-400">${order.status}</p></div><div class="space-y-2">${statusOptionsHtml}</div>`;
   document.getElementById('statusModalContent').innerHTML = modalContent;
   document.getElementById('dynamicStatusModal').classList.remove('hidden');
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
-function closeStatusModal() { 
-  document.getElementById('dynamicStatusModal').classList.add('hidden'); 
-  pendingStatusRecord = null; 
-}
+function closeStatusModal() { document.getElementById('dynamicStatusModal').classList.add('hidden'); pendingStatusRecord = null; }
 
 async function changeStatus(newStatus) { 
-  if (!pendingStatusRecord) { 
-    showToast('❌ حدث خطأ'); 
-    closeStatusModal(); 
-    return; 
-  }
-  
+  if (!pendingStatusRecord) { showToast('❌ حدث خطأ'); closeStatusModal(); return; }
   const order = pendingStatusRecord;
   const oldStatus = order.status;
-  
-  if (oldStatus === newStatus) {
-    closeStatusModal();
-    return;
-  }
-  
+  if (oldStatus === newStatus) { closeStatusModal(); return; }
   showToast(`🔄 جاري تغيير الحالة إلى ${newStatus}...`);
-  
   try {
     if (newStatus === 'ملغي' && order.__backendId) {
-      console.log(`📝 محاولة إلغاء الطلب ${order.__backendId} في نظام الزعيم...`);
       const cancelSuccess = await cancelInJenni(order.__backendId, `تم إلغاء الطلب من قبل ${isAgentMode ? 'المندوب' : 'المدير'}`);
-      if (cancelSuccess) {
-        showToast('✅ تم إلغاء الطلب في نظام الزعيم');
-      } else {
-        showToast('⚠️ تم تغيير الحالة محلياً فقط (فشل الاتصال بالزعيم)');
-      }
+      if (cancelSuccess) { showToast('✅ تم إلغاء الطلب في نظام الزعيم'); }
+      else { showToast('⚠️ تم تغيير الحالة محلياً فقط (فشل الاتصال بالزعيم)'); }
     }
-    
     const result = await window.dataSdk.update({ ...order, status: newStatus }); 
     closeStatusModal(); 
-    
     if (result.isOk) {
       showToast(`✅ تم تغيير الحالة من ${oldStatus} إلى ${newStatus}`);
       addNotification('تغيير حالة', `تم تغيير حالة طلب ${order.customer_name} من ${oldStatus} إلى ${newStatus}`, 'status', order.__backendId);
       setTimeout(() => { if (window.dataSdk && window.dataSdk.loadData) window.dataSdk.loadData(); }, 500);
-    } else {
-      showToast('❌ حدث خطأ في تحديث الحالة');
-    }
-  } catch (error) {
-    console.error('خطأ في تغيير الحالة:', error);
-    showToast('❌ حدث خطأ أثناء تغيير الحالة');
-    closeStatusModal();
-  }
+    } else { showToast('❌ حدث خطأ في تحديث الحالة'); }
+  } catch (error) { showToast('❌ حدث خطأ أثناء تغيير الحالة'); closeStatusModal(); }
 }
 
 function editOrderProfit(id) { 
@@ -1205,7 +1151,6 @@ if (loadLoginState()) {
 } else {
     console.log("👋 لا توجد جلسة سابقة");
 }
-
 loadNotificationsFromStorage();
 if (typeof lucide !== 'undefined') lucide.createIcons();
 
