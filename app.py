@@ -8,6 +8,8 @@ import json
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 import time
+import uuid
+from functools import wraps
 
 # تحميل المتغيرات البيئية
 load_dotenv()
@@ -15,11 +17,15 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-# ============== إعداد الجلسات ==============
+# ============== إعداد الجلسات الآمنة ==============
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'trust-center-secret-key-change-this-2024')
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SECURE'] = False
+app.config['SESSION_COOKIE_SECURE'] = False  # True في الإنتاج مع HTTPS
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 ساعة
+
+# تخزين الجلسات النشطة
+active_sessions = {}
 
 # ============== إعداد Supabase ==============
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://zmzotoutdeeizyfoikfw.supabase.co")
@@ -66,6 +72,137 @@ try:
 except Exception as e:
     print(f"❌ خطأ في الاتصال بـ Supabase: {e}")
     supabase = None
+
+# ============== دوال الأمان والجلسات ==============
+
+def invalidate_all_sessions():
+    """إبطال جميع الجلسات النشطة"""
+    global active_sessions
+    active_sessions.clear()
+    print("✅ تم إبطال جميع الجلسات النشطة")
+
+def session_required(f):
+    """Decorator للتحقق من صحة الجلسة"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        session_id = request.cookies.get('session_id')
+        user_id = session.get('user_id')
+        
+        if not session_id or not user_id:
+            return jsonify({"error": "غير مصرح به", "code": "UNAUTHORIZED"}), 401
+        
+        # التحقق من أن الجلسة لا تزال صالحة
+        if user_id not in active_sessions or session_id not in active_sessions.get(user_id, []):
+            return jsonify({"error": "تم تسجيل الخروج من جميع الأجهزة", "code": "SESSION_INVALIDATED"}), 401
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+def log_login_attempt(username, success, ip_address, user_agent):
+    """تسجيل محاولات الدخول"""
+    try:
+        if supabase:
+            # التحقق من وجود الجدول
+            try:
+                supabase.table('login_logs').insert({
+                    'username': username,
+                    'success': success,
+                    'ip_address': ip_address,
+                    'user_agent': user_agent[:200] if user_agent else '',
+                    'timestamp': datetime.now().isoformat()
+                }).execute()
+            except Exception as e:
+                print(f"⚠️ لا يمكن تسجيل المحاولة (قد لا يوجد جدول login_logs): {e}")
+    except Exception as e:
+        print(f"خطأ في تسجيل محاولة الدخول: {e}")
+
+# ============== API الأمان ==============
+
+@app.route('/api/logout-all', methods=['POST'])
+def logout_all_devices():
+    """تسجيل الخروج من جميع الأجهزة"""
+    try:
+        data = request.get_json() or {}
+        admin_password = data.get('admin_password')
+        
+        # التحقق من كلمة مرور الأدمن
+        if admin_password != '1234321ali123':
+            return jsonify({"success": False, "error": "كلمة المرور غير صحيحة"}), 401
+        
+        # إبطال جميع الجلسات
+        invalidate_all_sessions()
+        
+        # تسجيل حدث الأمان
+        add_notification_to_db(
+            '🔐 أمان النظام',
+            f'تم تسجيل الخروج من جميع الأجهزة - {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
+            'security'
+        )
+        
+        return jsonify({"success": True, "message": "تم تسجيل الخروج من جميع الأجهزة"}), 200
+        
+    except Exception as e:
+        print(f"❌ خطأ: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/change-admin-password', methods=['POST'])
+def change_admin_password():
+    """تغيير كلمة مرور الأدمن"""
+    try:
+        data = request.get_json()
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+        
+        # التحقق من كلمة المرور القديمة
+        if old_password != '1234321ali123':
+            return jsonify({"success": False, "error": "كلمة المرور الحالية غير صحيحة"}), 401
+        
+        if len(new_password) < 8:
+            return jsonify({"success": False, "error": "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل"}), 400
+        
+        # تحديث كلمة المرور في قاعدة البيانات
+        if supabase:
+            # تحديث للأدمن
+            supabase.table('agents').update({
+                "agent_password": new_password
+            }).eq('agent_code', 'admin').execute()
+            
+            supabase.table('agents').update({
+                "agent_password": new_password
+            }).eq('agent_name', 'المدير العام').execute()
+        
+        # إبطال جميع الجلسات بعد تغيير كلمة المرور
+        invalidate_all_sessions()
+        
+        add_notification_to_db(
+            '🔐 تغيير كلمة المرور',
+            'تم تغيير كلمة مرور الأدمن بنجاح',
+            'security'
+        )
+        
+        return jsonify({"success": True, "message": "تم تغيير كلمة المرور وتسجيل الخروج من جميع الأجهزة"}), 200
+        
+    except Exception as e:
+        print(f"❌ خطأ: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/active-sessions', methods=['GET'])
+def get_active_sessions():
+    """الحصول على عدد الجلسات النشطة (للأدمن فقط)"""
+    try:
+        auth_header = request.headers.get('Authorization', '')
+        # تحقق بسيط - يمكن تحسينه
+        if not auth_header:
+            return jsonify({"error": "غير مصرح به"}), 401
+        
+        session_count = sum(len(sessions) for sessions in active_sessions.values())
+        return jsonify({
+            "success": True,
+            "active_sessions_count": session_count,
+            "users": list(active_sessions.keys())
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ============== قائمة المحافظات ==============
 GOVERNORATES_LIST = [
@@ -212,7 +349,10 @@ def create_shipment_in_jenni(order_data):
             response = requests.post(
                 f"{JENNI_API_URL}/v2/shipments/create",
                 json=shipment_payload,
-                headers={"Content-Type": "application/json", **auth_header},
+                headers={
+                    "Content-Type": "application/json",
+                    **auth_header
+                },
                 timeout=30
             )
             
@@ -276,7 +416,10 @@ def cancel_shipment_in_jenni(shipment_number, reason="تم إلغاء الطلب
             response = requests.post(
                 f"{JENNI_API_URL}/v2/push/update-status",
                 json=update_payload,
-                headers={"Content-Type": "application/json", **auth_header},
+                headers={
+                    "Content-Type": "application/json",
+                    **auth_header
+                },
                 timeout=30
             )
             
@@ -868,24 +1011,43 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "supabase_connected": supabase is not None,
+        "active_sessions": sum(len(sessions) for sessions in active_sessions.values()),
         "timestamp": datetime.now().isoformat()
     }), 200
 
 @app.route('/api/login', methods=['POST'])
 def login():
-    """نقطة دخول بدون حفظ جلسات - كل تسجيل دخول جلسة جديدة"""
+    """نقطة دخول جديدة مع إدارة الجلسات"""
     try:
         data = request.get_json()
         username = data.get('username')
         password = data.get('password')
         
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        user_agent = request.headers.get('User-Agent', '')
+        
         # التحقق من صحة بيانات الدخول
         if username == 'admin' and password == '1234321ali123':
+            # تسجيل محاولة ناجحة
+            log_login_attempt(username, True, ip_address, user_agent)
+            
+            # إنشاء session_id جديد
+            session_id = str(uuid.uuid4())
+            session['user_id'] = username
+            session['user_type'] = 'admin'
+            session.permanent = True
+            
+            # تخزين الجلسة النشطة
+            if username not in active_sessions:
+                active_sessions[username] = []
+            active_sessions[username].append(session_id)
+            
             response = make_response(jsonify({
                 "success": True,
                 "user_type": "admin",
                 "message": "تم تسجيل الدخول بنجاح"
             }))
+            response.set_cookie('session_id', session_id, httponly=True, samesite='Lax', max_age=86400)
             return response
         
         # التحقق من وجود المندوب
@@ -894,14 +1056,29 @@ def login():
             if agent_result.data:
                 agent = agent_result.data[0]
                 if agent.get('agent_password') == password:
+                    log_login_attempt(username, True, ip_address, user_agent)
+                    
+                    session_id = str(uuid.uuid4())
+                    session['user_id'] = agent.get('agent_code')
+                    session['user_type'] = 'agent'
+                    session['agent_name'] = agent.get('agent_name')
+                    session.permanent = True
+                    
+                    if agent.get('agent_code') not in active_sessions:
+                        active_sessions[agent.get('agent_code')] = []
+                    active_sessions[agent.get('agent_code')].append(session_id)
+                    
                     response = make_response(jsonify({
                         "success": True,
                         "user_type": "agent",
                         "agent_name": agent.get('agent_name'),
                         "message": "تم تسجيل الدخول بنجاح"
                     }))
+                    response.set_cookie('session_id', session_id, httponly=True, samesite='Lax', max_age=86400)
                     return response
         
+        # محاولة فاشلة
+        log_login_attempt(username, False, ip_address, user_agent)
         return jsonify({"success": False, "error": "بيانات الدخول غير صحيحة"}), 401
         
     except Exception as e:
@@ -910,9 +1087,24 @@ def login():
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
-    """تسجيل الخروج"""
-    response = make_response(jsonify({"success": True, "message": "تم تسجيل الخروج"}))
-    return response
+    """تسجيل الخروج من الجلسة الحالية"""
+    try:
+        session_id = request.cookies.get('session_id')
+        user_id = session.get('user_id')
+        
+        if user_id and session_id and user_id in active_sessions:
+            if session_id in active_sessions[user_id]:
+                active_sessions[user_id].remove(session_id)
+            if not active_sessions[user_id]:
+                del active_sessions[user_id]
+        
+        session.clear()
+        
+        response = make_response(jsonify({"success": True, "message": "تم تسجيل الخروج"}))
+        response.set_cookie('session_id', '', expires=0)
+        return response
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # ============== تشغيل المهام المجدولة ==============
 def start_scheduler():
