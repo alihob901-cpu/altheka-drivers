@@ -392,25 +392,68 @@ async function confirmSettleAgent() {
       </div>
     </header>
 
-    <!-- Dashboard Page -->
+    <!-- Dashboard Page (للمدير) -->
     <div id="page-dashboard" class="page-content p-6 fade-in hidden">
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">إجمالي الطلبات</span><i data-lucide="shopping-bag" style="width:20px;height:20px;color:#3b82f6"></i></div><p id="statOrders" class="text-2xl font-800 text-white">0</p></div>
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">واصل</span><i data-lucide="check-circle" style="width:20px;height:20px;color:#22c55e"></i></div><p id="statDelivered" class="text-2xl font-800 text-emerald-400">0</p></div>
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">مرتجع</span><i data-lucide="rotate-ccw" style="width:20px;height:20px;color:#ef4444"></i></div><p id="statReturned" class="text-2xl font-800 text-red-400">0</p></div>
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">ملغي</span><i data-lucide="x-circle" style="width:20px;height:20px;color:#a855f7"></i></div><p id="statCancelled" class="text-2xl font-800 text-purple-400">0</p></div>
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs text-slate-500">إجمالي الطلبات</span>
+            <i data-lucide="shopping-bag" style="width:20px;height:20px;color:#3b82f6"></i>
+          </div>
+          <p id="statOrders" class="text-2xl font-800 text-white">0</p>
+        </div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs text-slate-500">واصل</span>
+            <i data-lucide="check-circle" style="width:20px;height:20px;color:#22c55e"></i>
+          </div>
+          <p id="statDelivered" class="text-2xl font-800 text-emerald-400">0</p>
+        </div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs text-slate-500">قيد التوصيل</span>
+            <i data-lucide="truck" style="width:20px;height:20px;color:#f59e0b"></i>
+          </div>
+          <p id="statPending" class="text-2xl font-800 text-amber-400">0</p>
+        </div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs text-slate-500">مرتجع</span>
+            <i data-lucide="rotate-ccw" style="width:20px;height:20px;color:#ef4444"></i>
+          </div>
+          <p id="statReturned" class="text-2xl font-800 text-red-400">0</p>
+        </div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs text-slate-500">ملغي</span>
+            <i data-lucide="x-circle" style="width:20px;height:20px;color:#a855f7"></i>
+          </div>
+          <p id="statCancelled" class="text-2xl font-800 text-purple-400">0</p>
+        </div>
       </div>
       <div class="bg-slate-900 border border-slate-800 rounded-xl"><div class="p-4 border-b border-slate-800 flex items-center justify-between"><h3 class="font-700">آخر الطلبات</h3><button onclick="switchPage('orders')" class="text-xs text-amber-400 hover:text-amber-300">عرض الكل ←</button></div><div id="recentOrdersList" class="divide-y divide-slate-800"></div></div>
       <div class="mt-6 bg-slate-900 border border-slate-800 rounded-xl"><div class="p-4 border-b border-slate-800"><h3 class="font-700">أداء المندوبين</h3></div><div id="agentPerformance" class="p-4"></div></div>
     </div>
 
-    <!-- Agent Dashboard Page -->
+    <!-- Agent Dashboard Page (للمندوب) -->
     <div id="page-agent-dashboard" class="page-content p-6 fade-in hidden">
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><span class="text-xs text-slate-500">إجمالي طلباتي</span><p id="agentStatTotalOrders" class="text-2xl font-800 text-white">0</p></div>
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><span class="text-xs text-slate-500">الواصلة</span><p id="agentStatDelivered" class="text-2xl font-800 text-emerald-400">0</p></div>
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><span class="text-xs text-slate-500">قيد التوصيل</span><p id="agentStatPending" class="text-2xl font-800 text-amber-400">0</p></div>
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><span class="text-xs text-slate-500">الراجعة</span><p id="agentStatReturned" class="text-2xl font-800 text-red-400">0</p></div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <span class="text-xs text-slate-500">إجمالي طلباتي</span>
+          <p id="agentStatTotalOrders" class="text-2xl font-800 text-white">0</p>
+        </div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <span class="text-xs text-slate-500">الواصلة</span>
+          <p id="agentStatDelivered" class="text-2xl font-800 text-emerald-400">0</p>
+        </div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <span class="text-xs text-slate-500">قيد التوصيل</span>
+          <p id="agentStatPending" class="text-2xl font-800 text-amber-400">0</p>
+        </div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <span class="text-xs text-slate-500">الراجعة</span>
+          <p id="agentStatReturned" class="text-2xl font-800 text-red-400">0</p>
+        </div>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-1 gap-4 mb-6">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><p class="text-slate-400 text-sm">إجمالي أرباحي</p><p id="agentStatProfit" class="text-2xl font-800 text-amber-400">0 د.ع</p></div>
@@ -436,7 +479,7 @@ async function confirmSettleAgent() {
         </div>
         <input id="searchOrders" oninput="renderOrders()" type="text" placeholder="بحث بالاسم أو الهاتف..." class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300 w-56">
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody></table></div></div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody><tr></div></div>
     </div>
 
     <!-- Agents Page -->
@@ -824,11 +867,13 @@ function updateAgentDashboard() {
 function updateAdminDashboard() {
   const total = allOrders.length;
   const delivered = allOrders.filter(o => o.status === 'واصل').length;
+  const pending = allOrders.filter(o => o.status === 'قيد التوصيل').length;
   const returned = allOrders.filter(o => o.status === 'راجع').length;
   const cancelled = allOrders.filter(o => o.status === 'ملغي').length;
   
   document.getElementById('statOrders').textContent = total;
   document.getElementById('statDelivered').textContent = delivered;
+  document.getElementById('statPending').textContent = pending;
   document.getElementById('statReturned').textContent = returned;
   document.getElementById('statCancelled').textContent = cancelled;
   
@@ -882,7 +927,7 @@ function renderOrders() {
   tbody.innerHTML = filtered.map((o, i) => {
     let actionsHtml = '';
     if (!isAgentMode) {
-      // للمدير: زر تعديل كامل فقط + زر حذف
+      // للمدير: زر تعديل كامل + زر حذف
       actionsHtml = `
         <button onclick='openEditOrderModal("${o.__backendId}")' class="text-amber-400 hover:text-amber-300 transition" title="تعديل كامل">
           <i data-lucide="edit-3" style="width:18px"></i>
@@ -891,10 +936,11 @@ function renderOrders() {
           <i data-lucide="trash-2" style="width:16px"></i>
         </button>`;
     } else {
-      // للمندوب: زر تعديل الملاحظة فقط
-      actionsHtml = `<button onclick='editOrderNote("${o.__backendId}")' class="text-green-400 hover:text-green-300 transition" title="تعديل الملاحظة">
-                        <i data-lucide="message-circle" style="width:16px"></i>
-                      </button>`;
+      // للمندوب: زر تعديل كامل فقط (بدون حذف)
+      actionsHtml = `
+        <button onclick='openEditOrderModal("${o.__backendId}")' class="text-amber-400 hover:text-amber-300 transition" title="تعديل كامل">
+          <i data-lucide="edit-3" style="width:18px"></i>
+        </button>`;
     }
     const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().split('T')[0] : ''); 
     const displayDate = orderDate ? orderDate : 'غير محدد';
