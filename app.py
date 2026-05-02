@@ -1,4 +1,4 @@
-﻿from flask import Flask, render_template, request, jsonify
+﻿from flask import Flask, render_template, request, jsonify, session, make_response
 from flask_cors import CORS
 from supabase import create_client, Client
 import os
@@ -8,12 +8,24 @@ import json
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 import time
+import uuid
+from functools import wraps
 
 # تحميل المتغيرات البيئية
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+# ============== إعداد الجلسات الآمنة ==============
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'trust-center-secret-key-change-this-2024')
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = False  # True في الإنتاج مع HTTPS
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 ساعة
+
+# تخزين الجلسات النشطة
+active_sessions = {}
 
 # ============== إعداد Supabase ==============
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://zmzotoutdeeizyfoikfw.supabase.co")
@@ -61,14 +73,144 @@ except Exception as e:
     print(f"❌ خطأ في الاتصال بـ Supabase: {e}")
     supabase = None
 
-# ============== قائمة المحافظات (تمت إضافة السليمانية ودهوك) ==============
+# ============== دوال الأمان والجلسات ==============
+
+def invalidate_all_sessions():
+    """إبطال جميع الجلسات النشطة"""
+    global active_sessions
+    active_sessions.clear()
+    print("✅ تم إبطال جميع الجلسات النشطة")
+
+def session_required(f):
+    """Decorator للتحقق من صحة الجلسة"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        session_id = request.cookies.get('session_id')
+        user_id = session.get('user_id')
+        
+        if not session_id or not user_id:
+            return jsonify({"error": "غير مصرح به", "code": "UNAUTHORIZED"}), 401
+        
+        # التحقق من أن الجلسة لا تزال صالحة
+        if user_id not in active_sessions or session_id not in active_sessions.get(user_id, []):
+            return jsonify({"error": "تم تسجيل الخروج من جميع الأجهزة", "code": "SESSION_INVALIDATED"}), 401
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+def log_login_attempt(username, success, ip_address, user_agent):
+    """تسجيل محاولات الدخول"""
+    try:
+        if supabase:
+            # التحقق من وجود الجدول
+            try:
+                supabase.table('login_logs').insert({
+                    'username': username,
+                    'success': success,
+                    'ip_address': ip_address,
+                    'user_agent': user_agent[:200] if user_agent else '',
+                    'timestamp': datetime.now().isoformat()
+                }).execute()
+            except Exception as e:
+                print(f"⚠️ لا يمكن تسجيل المحاولة (قد لا يوجد جدول login_logs): {e}")
+    except Exception as e:
+        print(f"خطأ في تسجيل محاولة الدخول: {e}")
+
+# ============== API الأمان ==============
+
+@app.route('/api/logout-all', methods=['POST'])
+def logout_all_devices():
+    """تسجيل الخروج من جميع الأجهزة"""
+    try:
+        data = request.get_json() or {}
+        admin_password = data.get('admin_password')
+        
+        # التحقق من كلمة مرور الأدمن
+        if admin_password != '1234321ali123':
+            return jsonify({"success": False, "error": "كلمة المرور غير صحيحة"}), 401
+        
+        # إبطال جميع الجلسات
+        invalidate_all_sessions()
+        
+        # تسجيل حدث الأمان
+        add_notification_to_db(
+            '🔐 أمان النظام',
+            f'تم تسجيل الخروج من جميع الأجهزة - {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
+            'security'
+        )
+        
+        return jsonify({"success": True, "message": "تم تسجيل الخروج من جميع الأجهزة"}), 200
+        
+    except Exception as e:
+        print(f"❌ خطأ: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/change-admin-password', methods=['POST'])
+def change_admin_password():
+    """تغيير كلمة مرور الأدمن"""
+    try:
+        data = request.get_json()
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+        
+        # التحقق من كلمة المرور القديمة
+        if old_password != '1234321ali123':
+            return jsonify({"success": False, "error": "كلمة المرور الحالية غير صحيحة"}), 401
+        
+        if len(new_password) < 8:
+            return jsonify({"success": False, "error": "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل"}), 400
+        
+        # تحديث كلمة المرور في قاعدة البيانات
+        if supabase:
+            # تحديث للأدمن
+            supabase.table('agents').update({
+                "agent_password": new_password
+            }).eq('agent_code', 'admin').execute()
+            
+            supabase.table('agents').update({
+                "agent_password": new_password
+            }).eq('agent_name', 'المدير العام').execute()
+        
+        # إبطال جميع الجلسات بعد تغيير كلمة المرور
+        invalidate_all_sessions()
+        
+        add_notification_to_db(
+            '🔐 تغيير كلمة المرور',
+            'تم تغيير كلمة مرور الأدمن بنجاح',
+            'security'
+        )
+        
+        return jsonify({"success": True, "message": "تم تغيير كلمة المرور وتسجيل الخروج من جميع الأجهزة"}), 200
+        
+    except Exception as e:
+        print(f"❌ خطأ: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/active-sessions', methods=['GET'])
+def get_active_sessions():
+    """الحصول على عدد الجلسات النشطة (للأدمن فقط)"""
+    try:
+        auth_header = request.headers.get('Authorization', '')
+        # تحقق بسيط - يمكن تحسينه
+        if not auth_header:
+            return jsonify({"error": "غير مصرح به"}), 401
+        
+        session_count = sum(len(sessions) for sessions in active_sessions.values())
+        return jsonify({
+            "success": True,
+            "active_sessions_count": session_count,
+            "users": list(active_sessions.keys())
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ============== قائمة المحافظات ==============
 GOVERNORATES_LIST = [
     'بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء',
     'ذي قار', 'ميسان', 'بابل', 'واسط', 'صلاح الدين', 'ديالى', 'المثنى', 'القادسية',
     'السليمانية', 'دهوك'
 ]
 
-# ============== دالة تحويل المحافظات (تمت إضافة السليمانية ودهوك) ==============
 def get_governorate_code(governorate_name):
     """تحويل اسم المحافظة إلى الكود المستخدم في نظام الزعيم"""
     governorate_map = {
@@ -95,10 +237,8 @@ def get_governorate_code(governorate_name):
     print(f"🗺️ تحويل {governorate_name} -> {code}")
     return code
 
-# ============== API لجلب قائمة المحافظات ==============
 @app.route('/api/governorates', methods=['GET'])
 def get_governorates():
-    """إرجاع قائمة المحافظات للواجهة الأمامية"""
     return jsonify(GOVERNORATES_LIST)
 
 # ============== دوال نظام الزعيم ==============
@@ -132,7 +272,7 @@ def jenni_login():
         return False
 
 def jenni_get_token():
-    """الحصول على JWT token صالح (مع إعادة تسجيل الدخول إذا انتهى)"""
+    """الحصول على JWT token صالح"""
     global jenni_jwt_token, jenni_token_expiry
     
     if jenni_jwt_token and jenni_token_expiry and time.time() < jenni_token_expiry - 60:
@@ -155,12 +295,10 @@ def create_shipment_in_jenni(order_data):
     governorate_name = order_data.get("governorate", "بغداد")
     governorate_code = get_governorate_code(governorate_name)
     
-    # ✅ معالجة رقم الهاتف - لا يتم استبداله برقم افتراضي أبداً
     phone = order_data.get("customer_phone", "")
     original_phone = phone
     phone = ''.join(filter(str.isdigit, phone))
     
-    # ✅ إذا كان الرقم غير صالح، نحتفظ بالرقم الأصلي ولا نستبدله
     if not phone.startswith('07') or len(phone) not in [10, 11]:
         phone = original_phone
         print(f"⚠️ تحذير: رقم الهاتف غير قياسي ({original_phone})، سيتم إرساله كما هو")
@@ -197,7 +335,6 @@ def create_shipment_in_jenni(order_data):
     
     print(f"📍 المحافظة المرسلة: {governorate_name} -> {governorate_code}")
     
-    # تجربة صيغ مختلفة للمصادقة
     auth_headers = [
         {"Authorization": f"Bearer {token}"},
         {"Authorization": token},
@@ -248,9 +385,8 @@ def create_shipment_in_jenni(order_data):
     
     return {"success": False, "error": "فشل جميع محاولات المصادقة", "skip": True}
 
-# ============== دالة إلغاء الطلب في نظام الزعيم ==============
 def cancel_shipment_in_jenni(shipment_number, reason="تم إلغاء الطلب"):
-    """إلغاء شحنة في نظام الزعيم عن طريق تحديث الحالة"""
+    """إلغاء شحنة في نظام الزعيم"""
     print(f"📝 محاولة إلغاء الطلب {shipment_number} في نظام الزعيم...")
     
     token = jenni_get_token()
@@ -267,7 +403,6 @@ def cancel_shipment_in_jenni(shipment_number, reason="تم إلغاء الطلب
         }]
     }
     
-    # تجربة صيغ مختلفة للمصادقة
     auth_headers = [
         {"Authorization": f"Bearer {token}"},
         {"Authorization": token},
@@ -306,7 +441,6 @@ def cancel_shipment_in_jenni(shipment_number, reason="تم إلغاء الطلب
     
     return {"success": False, "error": "فشل جميع محاولات الإلغاء"}
 
-# ============== دالة حذف الطلب من نظام الزعيم باستخدام shipment_id المخزن ==============
 def delete_shipment_by_id(shipment_id):
     """حذف شحنة من نظام الزعيم باستخدام shipment_id"""
     print(f"🗑️ محاولة حذف الطلب بالـ ID: {shipment_id} من نظام الزعيم...")
@@ -347,12 +481,10 @@ def delete_shipment_by_id(shipment_id):
     
     return {"success": False, "error": "فشل جميع محاولات المصادقة"}
 
-# ============== دالة حذف الطلب من نظام الزعيم باستخدام shipment_number ==============
 def delete_shipment_by_number(shipment_number):
-    """حذف شحنة من نظام الزعيم باستخدام shipment_number (تستدعي shipment_id أولا)"""
+    """حذف شحنة من نظام الزعيم باستخدام shipment_number"""
     print(f"🔍 البحث عن shipment_id للطلب {shipment_number}...")
     
-    # ✅ جلب shipment_id من قاعدة البيانات
     if not supabase:
         return {"success": False, "error": "Supabase not connected"}
     
@@ -362,30 +494,24 @@ def delete_shipment_by_number(shipment_number):
         if order_result.data and order_result.data[0].get('jenni_shipment_id'):
             shipment_id = order_result.data[0]['jenni_shipment_id']
             print(f"✅ تم العثور على shipment_id: {shipment_id}")
-            # ✅ استخدام shipment_id الصحيح للحذف
             return delete_shipment_by_id(shipment_id)
         else:
             print(f"⚠️ لم يتم العثور على shipment_id للطلب {shipment_number}")
-            # إذا لم نجد shipment_id، نحاول إلغاء الطلب
             return cancel_shipment_in_jenni(shipment_number, "تم حذف/إلغاء الطلب")
             
     except Exception as e:
         print(f"❌ خطأ في جلب shipment_id: {e}")
         return {"success": False, "error": str(e)}
 
-# ============== دالة حذف أو إلغاء الطلب (الواجهة الرئيسية) ==============
 def delete_or_cancel_shipment_in_jenni(shipment_number, order_data=None):
-    """حذف أو إلغاء شحنة من نظام الزعيم (يستخدم shipment_id المخزن أولا)"""
+    """حذف أو إلغاء شحنة من نظام الزعيم"""
     print(f"🔄 معالجة الطلب {shipment_number} في نظام الزعيم...")
     
-    # ✅ المحاولة الأولى: استخدام shipment_id المخزن
     result = delete_shipment_by_number(shipment_number)
     
-    # إذا نجح الحذف أو الإلغاء، نعيد النتيجة
     if result.get("success"):
         return result
     
-    # ✅ المحاولة الأخيرة: محاولة الحذف المباشر باستخدام رقم الطلب
     print("🔄 محاولة الحذف المباشر باستخدام رقم الطلب...")
     
     token = jenni_get_token()
@@ -419,10 +545,8 @@ def delete_or_cancel_shipment_in_jenni(shipment_number, order_data=None):
     
     return {"success": False, "error": "فشل حذف الطلب"}
 
-# ============== API لإلغاء/حذف الطلب في الزعيم ==============
 @app.route('/api/cancel-in-jenni/<shipment_number>', methods=['POST'])
 def api_cancel_in_jenni(shipment_number):
-    """API لإلغاء شحنة في نظام الزعيم"""
     try:
         data = request.get_json() or {}
         reason = data.get('reason', 'تم إلغاء الطلب')
@@ -431,10 +555,8 @@ def api_cancel_in_jenni(shipment_number):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-# ============== API لتصفير أرباح المندوب ==============
 @app.route('/api/settle-agent/<agent_id>', methods=['POST'])
 def settle_agent(agent_id):
-    """تصفير أرباح المندوب (حذف جميع الطلبات الواصلة)"""
     try:
         data = request.json
         paid_amount = data.get('paid_amount', 0)
@@ -476,13 +598,10 @@ def settle_agent(agent_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 def delete_shipment_from_jenni(shipment_number):
-    """حذف شحنة من نظام الزعيم (للتوافق مع الكود القديم)"""
     result = delete_or_cancel_shipment_in_jenni(shipment_number)
     return result
 
-# ============== مزامنة الحذف مع نظام الزعيم ==============
 def sync_deleted_shipments():
-    """مزامنة الطلبات المحذوفة من نظام الزعيم"""
     print("🔄 [مزامنة] بدء مزامنة الحذف مع نظام الزعيم...")
     
     if not supabase:
@@ -494,8 +613,6 @@ def sync_deleted_shipments():
             return
         
         deleted_count = 0
-        
-        # جلب جميع الطلبات المحلية
         local_orders = supabase.table('orders').select('__backendId, jenni_shipment_id').execute()
         
         for order in local_orders.data:
@@ -526,16 +643,12 @@ def sync_deleted_shipments():
     except Exception as e:
         print(f"❌ خطأ في مزامنة الحذف: {e}")
 
-# ============== مزامنة الطلبات الملغية (معطلة مؤقتاً) ==============
 def sync_cancelled_from_jenni():
-    """مزامنة الطلبات الملغية من نظام الزعيم - معطلة مؤقتاً"""
     print("⚠️ [مزامنة ملغية] ميزة مزامنة الطلبات الملغية معطلة مؤقتاً")
     return
 
-# ============== API للمزامنة ==============
 @app.route('/api/sync-with-jenni', methods=['POST'])
 def sync_with_jenni():
-    """مزامنة يدوية مع نظام الزعيم"""
     try:
         print("🔄 بدء مزامنة يدوية...")
         sync_deleted_shipments()
@@ -546,7 +659,6 @@ def sync_with_jenni():
 
 @app.route('/api/sync-cancelled-from-jenni', methods=['POST'])
 def api_sync_cancelled_from_jenni():
-    """API لمزامنة الطلبات الملغية - معطلة حالياً"""
     return jsonify({"success": True, "message": "الميزة معطلة مؤقتاً", "updated_count": 0}), 200
 
 # ============== دوال الإشعارات ==============
@@ -735,12 +847,9 @@ def api_delete_from_jenni(shipment_number):
     result = delete_or_cancel_shipment_in_jenni(shipment_number)
     return jsonify(result)
 
-# ============== Webhook لاستقبال تحديثات الزعيم (المعدل) ==============
 @app.route('/v2/push/update-status', methods=['POST'])
 def jenni_webhook():
-    """استقبال تحديثات الحالة من نظام الزعيم"""
     try:
-        # ✅ التحقق من التوكن
         auth_header = request.headers.get('Authorization', '')
         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
         
@@ -762,7 +871,6 @@ def jenni_webhook():
             print(f"⚠️ نظام غير صالح: {system_code}")
             return jsonify({"success": False, "message": "Invalid system code"}), 401
         
-        # ✅ خريطة تحويل الحالات
         status_map = {
             'DELIVERED': 'واصل',
             'DELIVERED_PRICE_CHANGED': 'واصل',
@@ -788,7 +896,6 @@ def jenni_webhook():
             new_status = status_map.get(current_step, None)
             
             if new_status and supabase and shipment_number:
-                # ✅ تحديث الطلب في قاعدة البيانات
                 result = supabase.table('orders').update({
                     "status": new_status,
                     "admin_notes": note if note else None,
@@ -800,7 +907,6 @@ def jenni_webhook():
                     updated_count += 1
                     print(f"✅ تم تحديث حالة الطلب {shipment_number} إلى {new_status}")
                     
-                    # ✅ إرسال إشعار للمندوب
                     order = result.data[0]
                     agent_name = order.get('agent_name')
                     if agent_name and agent_name not in ['admin', 'المدير العام']:
@@ -905,8 +1011,100 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "supabase_connected": supabase is not None,
+        "active_sessions": sum(len(sessions) for sessions in active_sessions.values()),
         "timestamp": datetime.now().isoformat()
     }), 200
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    """نقطة دخول جديدة مع إدارة الجلسات"""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        user_agent = request.headers.get('User-Agent', '')
+        
+        # التحقق من صحة بيانات الدخول
+        if username == 'admin' and password == '1234321ali123':
+            # تسجيل محاولة ناجحة
+            log_login_attempt(username, True, ip_address, user_agent)
+            
+            # إنشاء session_id جديد
+            session_id = str(uuid.uuid4())
+            session['user_id'] = username
+            session['user_type'] = 'admin'
+            session.permanent = True
+            
+            # تخزين الجلسة النشطة
+            if username not in active_sessions:
+                active_sessions[username] = []
+            active_sessions[username].append(session_id)
+            
+            response = make_response(jsonify({
+                "success": True,
+                "user_type": "admin",
+                "message": "تم تسجيل الدخول بنجاح"
+            }))
+            response.set_cookie('session_id', session_id, httponly=True, samesite='Lax', max_age=86400)
+            return response
+        
+        # التحقق من وجود المندوب
+        if supabase:
+            agent_result = supabase.table('agents').select('*').eq('agent_code', username).execute()
+            if agent_result.data:
+                agent = agent_result.data[0]
+                if agent.get('agent_password') == password:
+                    log_login_attempt(username, True, ip_address, user_agent)
+                    
+                    session_id = str(uuid.uuid4())
+                    session['user_id'] = agent.get('agent_code')
+                    session['user_type'] = 'agent'
+                    session['agent_name'] = agent.get('agent_name')
+                    session.permanent = True
+                    
+                    if agent.get('agent_code') not in active_sessions:
+                        active_sessions[agent.get('agent_code')] = []
+                    active_sessions[agent.get('agent_code')].append(session_id)
+                    
+                    response = make_response(jsonify({
+                        "success": True,
+                        "user_type": "agent",
+                        "agent_name": agent.get('agent_name'),
+                        "message": "تم تسجيل الدخول بنجاح"
+                    }))
+                    response.set_cookie('session_id', session_id, httponly=True, samesite='Lax', max_age=86400)
+                    return response
+        
+        # محاولة فاشلة
+        log_login_attempt(username, False, ip_address, user_agent)
+        return jsonify({"success": False, "error": "بيانات الدخول غير صحيحة"}), 401
+        
+    except Exception as e:
+        print(f"❌ خطأ في تسجيل الدخول: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    """تسجيل الخروج من الجلسة الحالية"""
+    try:
+        session_id = request.cookies.get('session_id')
+        user_id = session.get('user_id')
+        
+        if user_id and session_id and user_id in active_sessions:
+            if session_id in active_sessions[user_id]:
+                active_sessions[user_id].remove(session_id)
+            if not active_sessions[user_id]:
+                del active_sessions[user_id]
+        
+        session.clear()
+        
+        response = make_response(jsonify({"success": True, "message": "تم تسجيل الخروج"}))
+        response.set_cookie('session_id', '', expires=0)
+        return response
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # ============== تشغيل المهام المجدولة ==============
 def start_scheduler():
