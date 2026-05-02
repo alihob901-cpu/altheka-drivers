@@ -1081,9 +1081,16 @@ function closeOrderModal() { document.getElementById('orderModal').classList.add
 
 async function handleOrderSubmit(e) { 
   e.preventDefault(); 
-  const btn = e.target.querySelector('button[type="submit"]'); 
-  btn.disabled = true; 
-  btn.textContent = 'جاري الحفظ...'; 
+  
+  // ✅ البحث عن الزر داخل النموذج الحالي
+  const form = e.target;
+  const btn = form.querySelector('button[type="submit"]');
+  
+  // ✅ التحقق من وجود الزر قبل استخدامه
+  if (btn) {
+    btn.disabled = true; 
+    btn.textContent = 'جاري الحفظ...';
+  }
   
   const qty = parseInt(document.getElementById('f_qty').value) || 1; 
   const price = parseFloat(document.getElementById('f_price').value) || 0; 
@@ -1128,8 +1135,11 @@ async function handleOrderSubmit(e) {
     created_at: new Date().toISOString() 
   }); 
   
-  btn.disabled = false; 
-  btn.textContent = 'حفظ الطلب'; 
+  // ✅ التحقق من وجود الزر قبل إعادة تمكينه
+  if (btn) {
+    btn.disabled = false; 
+    btn.textContent = 'حفظ الطلب';
+  }
   
   if (result.isOk) { 
     closeOrderModal(); 
