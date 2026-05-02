@@ -547,26 +547,29 @@ async function confirmSettleAgent() {
 </form></div></div>
 
 <!-- نافذة تعديل الطلب الكامل -->
-<div id="editOrderModal" class="fixed inset-0 z-50 hidden">
-  <div class="modal-overlay absolute inset-0" onclick="closeEditOrderModal()"></div>
+<div id="orderModal" class="fixed inset-0 z-50 hidden">
+  <div class="modal-overlay absolute inset-0" onclick="closeOrderModal()"></div>
   <div class="absolute inset-y-0 left-0 w-full max-w-md bg-slate-900 border-r border-slate-800 overflow-auto shadow-2xl">
     <div class="p-5 border-b border-slate-800 flex justify-between">
-      <h3 class="font-700 text-lg">✏️ تعديل الطلب</h3>
-      <button onclick="closeEditOrderModal()"><i data-lucide="x"></i></button>
+      <h3 class="font-700 text-lg">➕ طلب جديد</h3>
+      <button onclick="closeOrderModal()"><i data-lucide="x"></i></button>
     </div>
-    <form id="editOrderForm" onsubmit="handleEditOrderSubmit(event)" class="p-5 space-y-4">
-      <div><label class="block text-sm text-slate-400 mb-1">👤 اسم الزبون</label><input id="editOrderCustomerName" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div><label class="block text-sm text-slate-400 mb-1">📞 رقم الهاتف</label><input id="editOrderCustomerPhone" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+    <form id="orderForm" onsubmit="handleOrderSubmit(event)" class="p-5 space-y-4">
+      <div><label class="block text-sm text-slate-400 mb-1">👤 اسم الزبون</label><input id="f_name" required placeholder="أدخل اسم الزبون" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+      <div><label class="block text-sm text-slate-400 mb-1">📞 رقم الهاتف</label><input id="f_phone" required placeholder="أدخل رقم الهاتف" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
       <div class="grid grid-cols-2 gap-3">
-        <div><label class="block text-sm text-slate-400 mb-1">📍 المحافظة</label><select id="editOrderGovernorate" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"><option value="">جار التحميل...</option></select></div>
-        <div><label class="block text-sm text-slate-400 mb-1">🏘️ المنطقة/الحي</label><input id="editOrderDistrict" placeholder="المنطقة أو الحي" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+        <div><label class="block text-sm text-slate-400 mb-1">📍 المحافظة</label><select id="f_governorate" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"><option value="">جار التحميل...</option></select></div>
+        <div><label class="block text-sm text-slate-400 mb-1">🏘️ المنطقة/الحي</label><input id="f_district" required placeholder="المنطقة أو الحي" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
       </div>
-      <div><label class="block text-sm text-slate-400 mb-1">📍 أقرب نقطة دالة</label><input id="editOrderLandmark" placeholder="مدرسة - جامع - محطة - مجمع" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div><label class="block text-sm text-slate-400 mb-1">📦 المنتج</label><input id="editOrderProduct" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div class="grid grid-cols-2 gap-3"><div><label class="block text-sm text-slate-400 mb-1">🔢 الكمية</label><input id="editOrderQuantity" type="number" value="1" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div><div><label class="block text-sm text-slate-400 mb-1">💰 السعر (د.ع)</label><input id="editOrderPrice" type="number" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div></div>
-      <div><label class="block text-sm text-slate-400 mb-1">📅 التاريخ</label><input id="editOrderDate" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
-      <div><label class="block text-sm text-slate-400 mb-1">📌 ملاحظة (اختياري)</label><textarea id="editOrderNote" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 resize-none"></textarea></div>
-      <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-3 rounded-lg font-700 mt-4">💾 حفظ التعديلات</button>
+      <div><label class="block text-sm text-slate-400 mb-1">📍 أقرب نقطة دالة</label><input id="f_landmark" placeholder="مدرسة - جامع - محطة - مجمع" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+      <div><label class="block text-sm text-slate-400 mb-1">📦 المنتج</label><input id="f_product" required placeholder="اسم المنتج" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm text-slate-400 mb-1">🔢 الكمية</label><input id="f_qty" type="number" value="1" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+        <div><label class="block text-sm text-slate-400 mb-1">💰 السعر (د.ع)</label><input id="f_price" type="number" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+      </div>
+      <div><label class="block text-sm text-slate-400 mb-1">📅 التاريخ</label><input id="f_date" type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"></div>
+      <div><label class="block text-sm text-slate-400 mb-1">📌 ملاحظة (اختياري)</label><textarea id="f_note" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 resize-none" placeholder="أضف ملاحظة للطلب..."></textarea></div>
+      <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-3 rounded-lg font-700 mt-4">💾 حفظ الطلب</button>
     </form>
   </div>
 </div>
