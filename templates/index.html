@@ -19,7 +19,7 @@
     * { font-family: 'Tajawal', sans-serif; }
     .sidebar-item { transition: all 0.2s; }
     .sidebar-item:hover, .sidebar-item.active { background: rgba(255,255,255,0.12); }
-    .card-stat { transition: transform 0.2s; }
+    .card-stat { transition: transform 0.2s; cursor: pointer; }
     .card-stat:hover { transform: translateY(-3px); }
     .fade-in { animation: fadeIn 0.3s ease; }
     @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
@@ -76,7 +76,7 @@ const firebaseConfig = {
 const VAPID_KEY = "BA2ONQejtLqvY0xKKIy0WaG3SAc1CCVm1xqvUhHI1gzxxlqGq65sGei8OroEqAK1haxQygk_2cp8Ugf-jyt3tWA";
 const DEFAULT_AGENT_PROFIT = 1000;
 
-// ✅ قائمة المحافظات الكاملة (تمت إضافة السليمانية ودهوك)
+// ✅ قائمة المحافظات الكاملة
 const FALLBACK_GOVERNORATES = ['بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء', 'ذي قار', 'ميسان', 'بابل', 'واسط', 'صلاح الدين', 'ديالى', 'المثنى', 'القادسية', 'السليمانية', 'دهوك'];
 
 firebase.initializeApp(firebaseConfig);
@@ -192,26 +192,57 @@ async function syncWithJenni() {
     }
 }
 
-// ============== دالة تسديد أرباح المندوب ==============
+// ============== دوال تسديد أرباح المندوب (نسخة جديدة - بدون حذف الطلبات) ==============
 let pendingAgentForSettlement = null;
+let agentSettlementData = {};
 
-function openSettleAgentModal(agentId) {
+async function fetchAgentSettlementData(agentId) {
+    try {
+        const response = await fetch(`/api/agent-settlement/${agentId}`);
+        const result = await response.json();
+        if (result.success) {
+            return result;
+        }
+        return null;
+    } catch (error) {
+        console.error('خطأ في جلب بيانات التسديد:', error);
+        return null;
+    }
+}
+
+async function openSettleAgentModal(agentId) {
     const agent = allAgents.find(a => a.__backendId === agentId);
     if (!agent) return;
     
-    const agentOrders = allOrders.filter(o => o.agent_name === agent.agent_name && o.status === 'واصل');
-    const totalProfit = agentOrders.reduce((sum, o) => sum + (o.profit || 0), 0);
+    showToast('🔄 جاري جلب بيانات الأرباح...');
     
-    if (totalProfit === 0) {
+    const settlementData = await fetchAgentSettlementData(agentId);
+    
+    if (!settlementData) {
+        showToast('❌ فشل جلب بيانات الأرباح');
+        return;
+    }
+    
+    const totalProfit = settlementData.total_profit || 0;
+    const totalPaid = settlementData.total_paid || 0;
+    const remainingProfit = settlementData.remaining_profit || totalProfit;
+    
+    if (totalProfit === 0 && remainingProfit === 0) {
         showToast('⚠️ لا توجد أرباح مستحقة لهذا المندوب');
         return;
     }
     
     pendingAgentForSettlement = agent;
     document.getElementById('settleAgentName').textContent = agent.agent_name;
-    document.getElementById('settleAgentTotalProfit').textContent = totalProfit.toLocaleString('ar-IQ');
-    document.getElementById('settleAgentProfit').value = totalProfit;
+    document.getElementById('settleAgentTotalProfit').textContent = formatNumber(totalProfit);
+    document.getElementById('settleAgentAlreadyPaid').textContent = formatNumber(totalPaid);
+    document.getElementById('settleAgentRemaining').textContent = formatNumber(remainingProfit);
+    document.getElementById('settleAgentProfit').value = remainingProfit;
     document.getElementById('settleAgentModal').classList.remove('hidden');
+}
+
+function formatNumber(num) {
+    return (num || 0).toLocaleString('ar-IQ');
 }
 
 function closeSettleAgentModal() {
@@ -225,28 +256,30 @@ async function confirmSettleAgent() {
     const paidAmount = parseFloat(document.getElementById('settleAgentProfit').value) || 0;
     const agent = pendingAgentForSettlement;
     const agentName = agent.agent_name;
+    const agentId = agent.__backendId;
     
-    const agentOrders = allOrders.filter(o => o.agent_name === agentName && o.status === 'واصل');
-    const totalProfit = agentOrders.reduce((sum, o) => sum + (o.profit || 0), 0);
+    const remainingSpan = document.getElementById('settleAgentRemaining');
+    const remainingText = remainingSpan.textContent.replace(/[^\d]/g, '');
+    const maxAmount = parseInt(remainingText) || 0;
     
     if (paidAmount <= 0) {
         showToast('❌ الرجاء إدخال مبلغ السداد');
         return;
     }
     
-    if (paidAmount > totalProfit) {
-        showToast(`⚠️ المبلغ المدخل (${paidAmount.toLocaleString('ar-IQ')}) أكبر من إجمالي الأرباح (${totalProfit.toLocaleString('ar-IQ')})`);
+    if (paidAmount > maxAmount) {
+        showToast(`⚠️ المبلغ المدخل أكبر من الربح المتبقي (${maxAmount.toLocaleString('ar-IQ')} د.ع)`);
         return;
     }
     
-    if (!confirm(`هل أنت متأكد من تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}؟\n\nسيتم حذف ${agentOrders.length} طلب واصل من سجل المندوب.`)) {
+    if (!confirm(`هل أنت متأكد من تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}؟\n\n⚠️ لن يتم حذف الطلبات الواصلة، وسيبقى الربح المتبقي في حسابه.`)) {
         return;
     }
     
     showToast(`🔄 جاري تسديد أرباح المندوب ${agentName}...`);
     
     try {
-        const response = await fetch(`/api/settle-agent/${agent.__backendId}`, {
+        const response = await fetch(`/api/settle-agent/${agentId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ paid_amount: paidAmount })
@@ -256,7 +289,7 @@ async function confirmSettleAgent() {
         
         if (result.success) {
             showToast(`✅ تم تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}`);
-            addNotification('سداد أرباح', `تم تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}`, 'settlement');
+            addNotification('سداد أرباح جزئي', `تم تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName} - المتبقي: ${result.remaining_profit.toLocaleString('ar-IQ')} د.ع`, 'settlement');
             closeSettleAgentModal();
             setTimeout(() => {
                 if (window.dataSdk && window.dataSdk.loadData) {
@@ -342,10 +375,11 @@ async function confirmSettleAgent() {
     <!-- Dashboard Page -->
     <div id="page-dashboard" class="page-content p-6 fade-in hidden">
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">إجمالي الطلبات</span><i data-lucide="shopping-bag" style="width:20px;height:20px;color:#3b82f6"></i></div><p id="statOrders" class="text-2xl font-800 text-white">0</p></div>
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">واصل</span><i data-lucide="check-circle" style="width:20px;height:20px;color:#22c55e"></i></div><p id="statDelivered" class="text-2xl font-800 text-emerald-400">0</p></div>
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">مرتجع</span><i data-lucide="rotate-ccw" style="width:20px;height:20px;color:#ef4444"></i></div><p id="statReturned" class="text-2xl font-800 text-red-400">0</p></div>
-        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">ملغي</span><i data-lucide="x-circle" style="width:20px;height:20px;color:#a855f7"></i></div><p id="statCancelled" class="text-2xl font-800 text-purple-400">0</p></div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4" onclick="goToOrdersWithStatus('all')"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">إجمالي الطلبات</span><i data-lucide="shopping-bag" style="width:20px;height:20px;color:#3b82f6"></i></div><p id="statOrders" class="text-2xl font-800 text-white">0</p></div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4" onclick="goToOrdersWithStatus('واصل')"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">واصل</span><i data-lucide="check-circle" style="width:20px;height:20px;color:#22c55e"></i></div><p id="statDelivered" class="text-2xl font-800 text-emerald-400">0</p></div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4" onclick="goToOrdersWithStatus('قيد التوصيل')"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">قيد التوصيل</span><i data-lucide="truck" style="width:20px;height:20px;color:#f59e0b"></i></div><p id="statPending" class="text-2xl font-800 text-amber-400">0</p></div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4" onclick="goToOrdersWithStatus('راجع')"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">مرتجع</span><i data-lucide="rotate-ccw" style="width:20px;height:20px;color:#ef4444"></i></div><p id="statReturned" class="text-2xl font-800 text-red-400">0</p></div>
+        <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4" onclick="goToOrdersWithStatus('ملغي')"><div class="flex items-center justify-between mb-2"><span class="text-xs text-slate-500">ملغي</span><i data-lucide="x-circle" style="width:20px;height:20px;color:#a855f7"></i></div><p id="statCancelled" class="text-2xl font-800 text-purple-400">0</p></div>
       </div>
       <div class="bg-slate-900 border border-slate-800 rounded-xl"><div class="p-4 border-b border-slate-800 flex items-center justify-between"><h3 class="font-700">آخر الطلبات</h3><button onclick="switchPage('orders')" class="text-xs text-amber-400 hover:text-amber-300">عرض الكل ←</button></div><div id="recentOrdersList" class="divide-y divide-slate-800"></div></div>
       <div class="mt-6 bg-slate-900 border border-slate-800 rounded-xl"><div class="p-4 border-b border-slate-800"><h3 class="font-700">أداء المندوبين</h3></div><div id="agentPerformance" class="p-4"></div></div>
@@ -359,8 +393,10 @@ async function confirmSettleAgent() {
         <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><span class="text-xs text-slate-500">قيد التوصيل</span><p id="agentStatPending" class="text-2xl font-800 text-amber-400">0</p></div>
         <div class="card-stat bg-slate-900 border border-slate-800 rounded-xl p-4"><span class="text-xs text-slate-500">الراجعة</span><p id="agentStatReturned" class="text-2xl font-800 text-red-400">0</p></div>
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-1 gap-4 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><p class="text-slate-400 text-sm">إجمالي أرباحي</p><p id="agentStatProfit" class="text-2xl font-800 text-amber-400">0 د.ع</p></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><p class="text-slate-400 text-sm">المبلغ المسدد</p><p id="agentStatPaid" class="text-2xl font-800 text-emerald-400">0 د.ع</p></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><p class="text-slate-400 text-sm">الربح المتبقي</p><p id="agentStatRemaining" class="text-2xl font-800 text-blue-400">0 د.ع</p></div>
       </div>
       <div class="bg-slate-900 border border-slate-800 rounded-xl"><div class="p-4 border-b border-slate-800"><h3 class="font-700">طلباتي الأخيرة</h3></div><div id="agentRecentOrdersList" class="divide-y divide-slate-800"></div></div>
     </div>
@@ -461,18 +497,20 @@ async function confirmSettleAgent() {
 
 <div id="deleteConfirm" class="fixed inset-0 z-50 hidden"><div class="modal-overlay absolute inset-0" onclick="closeDeleteConfirm()"></div><div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-80 text-center"><i data-lucide="trash-2" style="width:40px;height:40px;color:#ef4444" class="mx-auto mb-3"></i><p id="deleteConfirmText" class="font-700 mb-4">حذف العنصر؟</p><div class="flex gap-3"><button onclick="closeDeleteConfirm()" class="flex-1 bg-slate-800 py-2 rounded-lg">إلغاء</button><button id="confirmDeleteBtn" onclick="confirmDelete()" class="flex-1 bg-red-600 hover:bg-red-700 py-2 rounded-lg">حذف</button></div></div></div>
 
-<!-- نافذة تسديد أرباح المندوب -->
+<!-- نافذة تسديد أرباح المندوب (نسخة جديدة - بدون حذف الطلبات) -->
 <div id="settleAgentModal" class="fixed inset-0 z-50 hidden">
   <div class="modal-overlay absolute inset-0" onclick="closeSettleAgentModal()"></div>
   <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900 border border-emerald-500/30 rounded-2xl p-6 w-96 shadow-2xl">
     <div class="text-center mb-4">
       <i data-lucide="wallet" style="width:48px;height:48px;color:#10b981" class="mx-auto mb-3"></i>
       <h3 class="font-700 text-lg text-emerald-400">💰 تسديد أرباح المندوب</h3>
-      <p class="text-slate-400 text-sm mt-1">سيتم تصفير الأرباح بعد التسديد</p>
+      <p class="text-slate-400 text-sm mt-1">لن يتم حذف الطلبات - يبقى الربح المتبقي</p>
     </div>
     <p class="text-sm mb-2 text-slate-400">👤 المندوب: <span id="settleAgentName" class="text-white font-bold">-</span></p>
     <p class="text-sm mb-2 text-slate-400">💰 إجمالي الأرباح المستحقة: <span id="settleAgentTotalProfit" class="text-emerald-400 font-bold">0</span> د.ع</p>
-    <label class="block text-slate-400 text-sm mb-1">💵 المبلغ المدفوع (د.ع)</label>
+    <p class="text-sm mb-2 text-slate-400">💵 تم تسديده مسبقاً: <span id="settleAgentAlreadyPaid" class="text-amber-400 font-bold">0</span> د.ع</p>
+    <p class="text-sm mb-2 text-slate-400">📊 الربح المتبقي: <span id="settleAgentRemaining" class="text-blue-400 font-bold">0</span> د.ع</p>
+    <label class="block text-slate-400 text-sm mb-1">💵 المبلغ المراد تسديده الآن (د.ع)</label>
     <input id="settleAgentProfit" type="number" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 mb-4" placeholder="أدخل مبلغ السداد">
     <div class="flex gap-3">
       <button onclick="closeSettleAgentModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded-lg transition">إلغاء</button>
@@ -514,6 +552,19 @@ let currentEditAgent = null;
 let editingDateOrderId = null;
 let editingNoteOrderId = null;
 let todayFilterActive = false;
+
+// ============== دالة الانتقال إلى الطلبات حسب الحالة ==============
+function goToOrdersWithStatus(status) {
+    if (status === 'all') {
+        switchPage('orders');
+        document.getElementById('filterStatus').value = 'all';
+    } else {
+        switchPage('orders');
+        document.getElementById('filterStatus').value = status;
+    }
+    renderOrders();
+    showToast(`📋 عرض طلبات ${status === 'قيد التوصيل' ? 'قيد التوصيل' : status}`);
+}
 
 // ============== نظام الإشعارات ==============
 let notifications = [];
@@ -720,8 +771,9 @@ function updateDashboard() {
   }
 }
 
-function updateAgentDashboard() {
+async function updateAgentDashboard() {
   const currentAgentName = (currentUser.agent_name || '').trim();
+  const agentId = currentUser.__backendId;
   const agentOrders = allOrders.filter(o => (o.agent_name || '').trim() === currentAgentName);
   const total = agentOrders.length;
   const delivered = agentOrders.filter(o => o.status === 'واصل').length;
@@ -735,6 +787,18 @@ function updateAgentDashboard() {
   document.getElementById('agentStatReturned').textContent = returned;
   document.getElementById('agentStatProfit').textContent = totalProfit.toLocaleString('ar-IQ');
   
+  // جلب بيانات التسديد للمندوب
+  if (agentId) {
+      const settlementData = await fetchAgentSettlementData(agentId);
+      if (settlementData) {
+          document.getElementById('agentStatPaid').textContent = formatNumber(settlementData.total_paid);
+          document.getElementById('agentStatRemaining').textContent = formatNumber(settlementData.remaining_profit);
+      } else {
+          document.getElementById('agentStatPaid').textContent = '0';
+          document.getElementById('agentStatRemaining').textContent = formatNumber(totalProfit);
+      }
+  }
+  
   const recent = [...agentOrders].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8);
   const container = document.getElementById('agentRecentOrdersList');
   if (container) { 
@@ -746,11 +810,13 @@ function updateAgentDashboard() {
 function updateAdminDashboard() {
   const total = allOrders.length;
   const delivered = allOrders.filter(o => o.status === 'واصل').length;
+  const pending = allOrders.filter(o => o.status === 'قيد التوصيل').length;
   const returned = allOrders.filter(o => o.status === 'راجع').length;
   const cancelled = allOrders.filter(o => o.status === 'ملغي').length;
   
   document.getElementById('statOrders').textContent = total;
   document.getElementById('statDelivered').textContent = delivered;
+  document.getElementById('statPending').textContent = pending;
   document.getElementById('statReturned').textContent = returned;
   document.getElementById('statCancelled').textContent = cancelled;
   
@@ -867,7 +933,7 @@ function renderCustomers() {
   allOrders.forEach(o => { const key = o.customer_phone; if (!customers[key]) customers[key] = { name: o.customer_name, phone: o.customer_phone, address: o.customer_address, orders: 0, total: 0 }; customers[key].orders++; if (o.status === 'واصل') customers[key].total += (o.total || 0); });
   const el = document.getElementById('customersDetail'); if (!el) return; const keys = Object.keys(customers);
   if (!keys.length) { el.innerHTML = '<div class="text-center text-slate-600 p-8">👥 لا يوجد عملاء</div>'; return; }
-  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th><tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
+  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
 }
 
 function renderInventory() {

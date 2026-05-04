@@ -39,3 +39,11 @@ Webhook endpoint	https://altheka-drivers.onrender.com/v2/push/update-status
 Static bearer token	TrustCenterSecretKey123
 Mode
 
+بدون زحمة اخواني المطورين احتاج الى ترقية صلاحيات حساب لتشمل:
+لجلب تفاصيل الشحنة
+
+/v2/shipments/query
+
+/v2/reference/postponed-reasons
+
+/v2/reference/return-reasons

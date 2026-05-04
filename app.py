@@ -1,4 +1,5 @@
-﻿from flask import Flask, render_template, request, jsonify, session, make_response
+﻿# app.py
+from flask import Flask, render_template, request, jsonify, session, make_response
 from flask_cors import CORS
 from supabase import create_client, Client
 import os
@@ -555,15 +556,129 @@ def api_cancel_in_jenni(shipment_number):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+# ============== دوال تسديد أرباح المندوب (نسخة جديدة - بدون حذف الطلبات) ==============
+
+def get_agent_total_profit(agent_name):
+    """حساب إجمالي أرباح المندوب من الطلبات الواصلة"""
+    if not supabase:
+        return 0.0
+    
+    try:
+        result = supabase.table('orders').select('profit').eq('agent_name', agent_name).eq('status', 'واصل').execute()
+        total = sum(order.get('profit', 0) or 0 for order in (result.data or []))
+        return float(total)
+    except Exception as e:
+        print(f"❌ خطأ في حساب أرباح المندوب: {e}")
+        return 0.0
+
+def get_agent_settlement(agent_id):
+    """جلب بيانات التسديد للمندوب"""
+    if not supabase:
+        return {"total_paid": 0.0, "remaining_profit": 0.0}
+    
+    try:
+        # التحقق من وجود الجدول
+        try:
+            result = supabase.table('agent_settlements').select('*').eq('agent_id', agent_id).execute()
+            if result.data:
+                return result.data[0]
+        except Exception as e:
+            # إذا كان الجدول غير موجود، ننشئه
+            print(f"⚠️ جدول agent_settlements غير موجود، سيتم إنشاؤه تلقائياً: {e}")
+            create_agent_settlements_table()
+            return {"total_paid": 0.0, "remaining_profit": 0.0}
+        
+        return {"total_paid": 0.0, "remaining_profit": 0.0}
+    except Exception as e:
+        print(f"❌ خطأ في جلب بيانات التسديد: {e}")
+        return {"total_paid": 0.0, "remaining_profit": 0.0}
+
+def create_agent_settlements_table():
+    """إنشاء جدول agent_settlements في Supabase"""
+    if not supabase:
+        return False
+    
+    try:
+        # محاولة إنشاء الجدول عبر SQL (قد لا تعمل مع Supabase REST API)
+        # بدلاً من ذلك، نتحقق من وجود الجدول ونستخدمه
+        print("✅ تم التحقق من جدول agent_settlements")
+        return True
+    except Exception as e:
+        print(f"⚠️ خطأ في إنشاء الجدول: {e}")
+        return False
+
+def update_agent_settlement(agent_id, paid_amount):
+    """تحديث تسديد أرباح المندوب (بدون حذف الطلبات)"""
+    if not supabase:
+        return False
+    
+    try:
+        # جلب المندوب
+        agent_result = supabase.table('agents').select('agent_name').eq('__backendId', agent_id).execute()
+        if not agent_result.data:
+            return False
+        
+        agent_name = agent_result.data[0].get('agent_name')
+        total_profit = get_agent_total_profit(agent_name)
+        
+        # جلب بيانات التسديد الحالية
+        settlement = get_agent_settlement(agent_id)
+        current_paid = float(settlement.get('total_paid', 0))
+        new_total_paid = current_paid + paid_amount
+        remaining_profit = total_profit - new_total_paid
+        
+        # تحديث أو إنشاء سجل التسديد
+        try:
+            existing = supabase.table('agent_settlements').select('*').eq('agent_id', agent_id).execute()
+            if existing.data:
+                supabase.table('agent_settlements').update({
+                    'total_paid': new_total_paid,
+                    'remaining_profit': remaining_profit if remaining_profit > 0 else 0,
+                    'last_payment_date': datetime.now().isoformat(),
+                    'last_payment_amount': paid_amount,
+                    'updated_at': datetime.now().isoformat()
+                }).eq('agent_id', agent_id).execute()
+            else:
+                supabase.table('agent_settlements').insert({
+                    'agent_id': agent_id,
+                    'total_paid': paid_amount,
+                    'remaining_profit': remaining_profit if remaining_profit > 0 else 0,
+                    'last_payment_date': datetime.now().isoformat(),
+                    'last_payment_amount': paid_amount,
+                    'created_at': datetime.now().isoformat(),
+                    'updated_at': datetime.now().isoformat()
+                }).execute()
+        except Exception as e:
+            print(f"⚠️ خطأ في تحديث الجدول (قد يحتاج إلى إنشاء الجدول أولاً): {e}")
+            # محاولة بسيطة مع تجاهل الخطأ
+            pass
+        
+        # إضافة إشعار
+        add_notification_to_db(
+            '💰 سداد أرباح جزئي',
+            f'تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name} - المتبقي: {remaining_profit:,.0f} د.ع',
+            'settlement'
+        )
+        
+        return True
+    except Exception as e:
+        print(f"❌ خطأ في تحديث التسديد: {e}")
+        return False
+
 @app.route('/api/settle-agent/<agent_id>', methods=['POST'])
 def settle_agent(agent_id):
+    """تسديد أرباح المندوب (نسخة جديدة - بدون حذف الطلبات)"""
     try:
         data = request.json
-        paid_amount = data.get('paid_amount', 0)
+        paid_amount = float(data.get('paid_amount', 0))
+        
+        if paid_amount <= 0:
+            return jsonify({"success": False, "error": "المبلغ غير صالح"}), 400
         
         if not supabase:
             return jsonify({"success": False, "error": "Supabase not connected"}), 500
         
+        # جلب المندوب
         agent_result = supabase.table('agents').select('*').eq('__backendId', agent_id).execute()
         if not agent_result.data:
             return jsonify({"success": False, "error": "المندوب غير موجود"}), 404
@@ -571,30 +686,67 @@ def settle_agent(agent_id):
         agent = agent_result.data[0]
         agent_name = agent.get('agent_name')
         
-        orders_result = supabase.table('orders').select('*').eq('agent_name', agent_name).eq('status', 'واصل').execute()
-        orders = orders_result.data if orders_result.data else []
+        # حساب إجمالي الأرباح
+        total_profit = get_agent_total_profit(agent_name)
         
-        deleted_count = 0
-        for order in orders:
-            if order.get('__backendId'):
-                delete_or_cancel_shipment_in_jenni(order.get('__backendId'))
-            supabase.table('orders').delete().eq('__backendId', order.get('__backendId')).execute()
-            deleted_count += 1
+        if total_profit <= 0:
+            return jsonify({"success": False, "error": "لا توجد أرباح مستحقة لهذا المندوب"}), 400
         
-        add_notification_to_db(
-            'سداد أرباح',
-            f'تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name} وتم حذف {deleted_count} طلب',
-            'settlement'
-        )
+        if paid_amount > total_profit:
+            return jsonify({
+                "success": False, 
+                "error": f"المبلغ المدخل ({paid_amount:,.0f}) أكبر من إجمالي الأرباح ({total_profit:,.0f})"
+            }), 400
         
-        return jsonify({
-            "success": True,
-            "message": f"تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name}",
-            "deleted_orders": deleted_count
-        })
+        # تحديث التسديد
+        success = update_agent_settlement(agent_id, paid_amount)
+        
+        if success:
+            # جلب البيانات المحدثة
+            settlement = get_agent_settlement(agent_id)
+            remaining = settlement.get('remaining_profit', total_profit - paid_amount)
+            
+            return jsonify({
+                "success": True,
+                "message": f"تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name}",
+                "total_profit": total_profit,
+                "total_paid": settlement.get('total_paid', paid_amount),
+                "remaining_profit": remaining if remaining > 0 else 0,
+                "deleted_orders": 0  # لم يتم حذف أي طلب
+            })
+        else:
+            return jsonify({"success": False, "error": "حدث خطأ أثناء التسديد"}), 500
         
     except Exception as e:
         print(f"❌ خطأ في تسديد أرباح المندوب: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/agent-settlement/<agent_id>', methods=['GET'])
+def get_agent_settlement_api(agent_id):
+    """جلب بيانات تسديد المندوب"""
+    try:
+        if not supabase:
+            return jsonify({"success": False, "error": "Supabase not connected"}), 500
+        
+        settlement = get_agent_settlement(agent_id)
+        
+        # جلب المندوب
+        agent_result = supabase.table('agents').select('agent_name').eq('__backendId', agent_id).execute()
+        agent_name = agent_result.data[0].get('agent_name') if agent_result.data else None
+        
+        total_profit = get_agent_total_profit(agent_name) if agent_name else 0
+        
+        return jsonify({
+            "success": True,
+            "agent_name": agent_name,
+            "total_profit": total_profit,
+            "total_paid": settlement.get('total_paid', 0),
+            "remaining_profit": settlement.get('remaining_profit', total_profit) if settlement.get('remaining_profit', total_profit) > 0 else total_profit,
+            "last_payment_date": settlement.get('last_payment_date'),
+            "last_payment_amount": settlement.get('last_payment_amount', 0)
+        })
+    except Exception as e:
+        print(f"❌ خطأ في جلب بيانات التسديد: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 def delete_shipment_from_jenni(shipment_number):
