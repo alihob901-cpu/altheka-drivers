@@ -287,6 +287,20 @@ def create_shipment_in_jenni(order_data):
     """إرسال طلب جديد إلى نظام الزعيم"""
     print(f"📤 بدء إرسال الطلب {order_data.get('__backendId')} إلى نظام الزعيم...")
     
+    # ✅ دالة لتحويل الأرقام العربية إلى إنجليزية
+    def arabic_to_english_numbers(text):
+        """تحويل الأرقام العربية (٠-٩) إلى إنجليزية (0-9)"""
+        arabic_numerals = {
+            '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+            '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
+        }
+        if not text:
+            return text
+        text = str(text)
+        for arabic, english in arabic_numerals.items():
+            text = text.replace(arabic, english)
+        return text
+    
     token = jenni_get_token()
     if not token:
         print("❌ فشل الحصول على التوكن")
@@ -297,13 +311,25 @@ def create_shipment_in_jenni(order_data):
     
     phone = order_data.get("customer_phone", "")
     original_phone = phone
-    phone = ''.join(filter(str.isdigit, phone))
+    
+    # ✅ تنظيف الرقم: إزالة المسافات والشرطات والأقواس
+    phone = ''.join(filter(lambda x: x.isdigit() or x in '٠١٢٣٤٥٦٧٨٩', phone))
+    
+    # ✅ تحويل الأرقام العربية إلى إنجليزية
+    phone = arabic_to_english_numbers(phone)
+    
+    # ✅ تحقق إضافي: التأكد من أن الرقم يبدأ بـ 07 أو 7
+    if phone.startswith('7') and len(phone) == 9:
+        phone = '0' + phone
     
     if not phone.startswith('07') or len(phone) not in [10, 11]:
-        phone = original_phone
-        print(f"⚠️ تحذير: رقم الهاتف غير قياسي ({original_phone})، سيتم إرساله كما هو")
+        print(f"⚠️ تحذير: رقم الهاتف غير قياسي ({original_phone}) -> بعد التحويل ({phone})")
+        # محاولة تنظيف إضافية
+        phone = ''.join(filter(str.isdigit, original_phone))
+        phone = arabic_to_english_numbers(phone)
     
-    print(f"📞 الرقم المرسل إلى الزعيم: {phone}")
+    print(f"📞 الرقم الأصلي: {original_phone}")
+    print(f"📞 الرقم بعد التحويل: {phone}")
     
     product_info = order_data.get("product_info", "") or order_data.get("product", "")
     quantity = int(order_data.get("quantity", 1))
