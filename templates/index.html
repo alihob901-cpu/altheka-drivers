@@ -847,13 +847,6 @@ function renderOrders() {
       
       // البحث بالأرقام فقط (الميزة الأساسية)
       if (searchDigits.length >= 3 && phoneDigits.includes(searchDigits)) return true;
-      
-      // البحث بأول 7 أرقام أو آخر 7 أرقام
-      if (searchDigits.length >= 7) {
-        if (phoneDigits.includes(searchDigits.substring(0, 7))) return true;
-        if (phoneDigits.includes(searchDigits.substring(searchDigits.length - 7))) return true;
-      }
-      
       return false;
     });
   }
