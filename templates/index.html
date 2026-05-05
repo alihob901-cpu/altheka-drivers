@@ -779,10 +779,83 @@ function updateAdminDashboard() {
 }
 
 function renderOrders() {
-  const statusFilter = document.getElementById('filterStatus')?.value || 'all'; const search = document.getElementById('searchOrders')?.value.toLowerCase() || '';
+  const statusFilter = document.getElementById('filterStatus')?.value || 'all'; 
+  const search = document.getElementById('searchOrders')?.value.toLowerCase() || '';
+  
+  // ✅ دالة تحويل الأرقام العربية إلى إنجليزية
+  function arabicToEnglish(text) {
+    const arabicNumbers = {
+      '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+      '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
+    };
+    let result = text;
+    for (let [arabic, english] of Object.entries(arabicNumbers)) {
+      result = result.replace(new RegExp(arabic, 'g'), english);
+    }
+    return result;
+  }
+  
+  // ✅ دالة تحويل الأرقام الإنجليزية إلى عربية
+  function englishToArabic(text) {
+    const englishNumbers = {
+      '0': '٠', '1': '١', '2': '٢', '3': '٣', '4': '٤',
+      '5': '٥', '6': '٦', '7': '٧', '8': '٨', '9': '٩'
+    };
+    let result = text;
+    for (let [english, arabic] of Object.entries(englishNumbers)) {
+      result = result.replace(new RegExp(english, 'g'), arabic);
+    }
+    return result;
+  }
+  
+  // ✅ دالة لاستخراج الأرقام فقط من النص
+  function extractDigits(text) {
+    if (!text) return '';
+    // تحويل الأرقام العربية إلى إنجليزية أولاً ثم استخراج الأرقام
+    let englishText = arabicToEnglish(text);
+    return englishText.replace(/[^\d]/g, '');
+  }
+  
   let filtered = [...allOrders];
   if (statusFilter !== 'all') filtered = filtered.filter(o => o.status === statusFilter);
-  if (search) filtered = filtered.filter(o => (o.customer_name||'').toLowerCase().includes(search) || (o.customer_phone||'').includes(search));
+  
+  // ✅ البحث الذكي: يبحث بالرقم العربي والإنجليزي معاً بغض النظر عن لغة الإدخال
+  if (search) {
+    // تحويل كلمة البحث إلى صيغ مختلفة
+    const searchEnglish = arabicToEnglish(search);      // تحويل عربي -> إنجليزي
+    const searchArabic = englishToArabic(search);      // تحويل إنجليزي -> عربي
+    const searchDigitsOnly = extractDigits(search);     // الأرقام فقط (إنجليزية)
+    
+    filtered = filtered.filter(o => {
+      const customerName = (o.customer_name || '').toLowerCase();
+      const customerPhone = (o.customer_phone || '');
+      const customerPhoneLower = customerPhone.toLowerCase();
+      
+      // 1. البحث بالاسم
+      if (customerName.includes(search)) return true;
+      if (customerName.includes(searchEnglish)) return true;
+      if (customerName.includes(searchArabic)) return true;
+      
+      // 2. البحث بالرقم الأصلي (كما هو مخزن في قاعدة البيانات)
+      if (customerPhoneLower.includes(search)) return true;
+      if (customerPhoneLower.includes(searchEnglish)) return true;
+      if (customerPhoneLower.includes(searchArabic)) return true;
+      
+      // 3. استخراج الأرقام من رقم العميل (تحويل أي أرقام عربية إلى إنجليزية)
+      const phoneDigitsOnly = extractDigits(customerPhone);
+      
+      // 4. مقارنة الأرقام فقط (بغض النظر عن لغة الكتابة أو وجود مسافات أو شرطات)
+      if (phoneDigitsOnly.includes(searchDigitsOnly) && searchDigitsOnly.length >= 4) return true;
+      
+      // 5. البحث بأول 7 أرقام أو آخر 7 أرقام (للمساعدة في حالة الأرقام الطويلة)
+      if (searchDigitsOnly.length >= 7) {
+        if (phoneDigitsOnly.includes(searchDigitsOnly.substring(0, 7))) return true;
+        if (phoneDigitsOnly.includes(searchDigitsOnly.substring(searchDigitsOnly.length - 7))) return true;
+      }
+      
+      return false;
+    });
+  }
   
   // ✅ تصفية طلبات اليوم
   if (todayFilterActive) {
@@ -793,27 +866,34 @@ function renderOrders() {
     });
     if (filtered.length === 0 && search === '' && statusFilter === 'all') {
       const container = document.getElementById('ordersTableBody');
-      if (container) container.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات لهذا اليوم</td></tr>';
+      if (container) container.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات لهذا اليوم</td></table>';
       return;
     }
   }
   
   filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const tbody = document.getElementById('ordersTableBody'); if (!tbody) return;
-  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات</td></tr>'; return; }
+  if (!filtered.length) { 
+    tbody.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات مطابقة للبحث</td></tr>'; 
+    return; 
+  }
+  
   tbody.innerHTML = filtered.map((o, i) => {
     let actionsHtml = '';
     if (!isAgentMode) {
-      actionsHtml = `<button onclick='editOrderProfit("${o.__backendId}")' class="text-blue-400 hover:text-blue-300 transition" title="تعديل الربح"><i data-lucide="pencil" style="width:16px"><\/i><\/button><button onclick='editOrderDate("${o.__backendId}")' class="text-purple-400 hover:text-purple-300 transition" title="تعديل التاريخ"><i data-lucide="calendar" style="width:16px"><\/i><\/button><button onclick='openDeleteConfirm("${o.__backendId}", "order")' class="text-red-400 hover:text-red-300 transition" title="حذف"><i data-lucide="trash-2" style="width:16px"><\/i><\/button>`;
+      actionsHtml = `<button onclick='editOrderProfit("${o.__backendId}")' class="text-blue-400 hover:text-blue-300 transition" title="تعديل الربح"><i data-lucide="pencil" style="width:16px"></i></button><button onclick='editOrderDate("${o.__backendId}")' class="text-purple-400 hover:text-purple-300 transition" title="تعديل التاريخ"><i data-lucide="calendar" style="width:16px"></i></button><button onclick='openDeleteConfirm("${o.__backendId}", "order")' class="text-red-400 hover:text-red-300 transition" title="حذف"><i data-lucide="trash-2" style="width:16px"></i></button>`;
     } else {
-      actionsHtml = `<button onclick='editOrderNote("${o.__backendId}")' class="text-green-400 hover:text-green-300 transition" title="تعديل الملاحظة"><i data-lucide="message-circle" style="width:16px"><\/i><\/button>`;
+      actionsHtml = `<button onclick='editOrderNote("${o.__backendId}")' class="text-green-400 hover:text-green-300 transition" title="تعديل الملاحظة"><i data-lucide="message-circle" style="width:16px"></i></button>`;
     }
-    const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().split('T')[0] : ''); const displayDate = orderDate ? orderDate : 'غير محدد';
-    const noteText = o.admin_notes || ''; const shortNote = noteText.length > 30 ? noteText.substring(0,30) + '...' : noteText;
-    const address = o.customer_address || ''; const shortAddress = address.length > 25 ? address.substring(0,25) + '...' : address;
+    const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().split('T')[0] : ''); 
+    const displayDate = orderDate ? orderDate : 'غير محدد';
+    const noteText = o.admin_notes || ''; 
+    const shortNote = noteText.length > 30 ? noteText.substring(0,30) + '...' : noteText;
+    const address = o.customer_address || ''; 
+    const shortAddress = address.length > 25 ? address.substring(0,25) + '...' : address;
     const productDisplay = o.product_info ? `${escapeHtml(o.product_info)}` : `${escapeHtml(o.product)} ×${o.quantity}`;
     let statusClass = `status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}`;
-    return `<tr class="hover:bg-slate-800/50 transition"><td class="px-4 py-3">${i+1}<\/td><td class="px-4 py-3 font-500">${escapeHtml(o.customer_name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(o.customer_phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(o.customer_phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(address)}")' title="انقر لنسخ العنوان">📍 ${shortAddress || '-'}<\/span><\/td><td class="px-4 py-3">${productDisplay}<\/td><td class="px-4 py-3 font-700">${(o.total||0).toLocaleString('ar-IQ')}<\/td><td class="px-4 py-3 font-700 text-amber-400">${(o.profit||0).toLocaleString('ar-IQ')} د.ع<\/td><td class="px-4 py-3 font-500 text-blue-400">${escapeHtml(o.agent_name || 'مندوب')}<\/td><td class="px-4 py-3 font-500 text-slate-300"><span class="cursor-pointer hover:text-amber-400 transition" onclick='editOrderDate("${o.__backendId}")' title="انقر لتعديل التاريخ">📅 ${displayDate}<\/span><\/td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs ${statusClass} cursor-pointer hover:opacity-80 transition" onclick='openStatusModal("${o.__backendId}")' title="انقر لتغيير الحالة">${o.status}<\/span><\/td><td class="px-4 py-3 text-slate-400 max-w-[200px]"><span class="clickable-note" onclick='showFullNote("${escapeHtml(noteText).replace(/"/g, '&quot;')}", "${escapeHtml(o.customer_name)}")' title="انقر لعرض الملاحظة كاملة">${shortNote || '-'}<\/span><\/td><td class="px-4 py-3 flex gap-3">${actionsHtml}<\/td><\/tr>`;
+    return `<tr class="hover:bg-slate-800/50 transition"><td class="px-4 py-3">${i+1}</td><td class="px-4 py-3 font-500">${escapeHtml(o.customer_name)}</td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(o.customer_phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(o.customer_phone)}</span></td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(address)}")' title="انقر لنسخ العنوان">📍 ${shortAddress || '-'}</span></td><td class="px-4 py-3">${productDisplay}</td><td class="px-4 py-3 font-700">${(o.total||0).toLocaleString('ar-IQ')}</td><td class="px-4 py-3 font-700 text-amber-400">${(o.profit||0).toLocaleString('ar-IQ')} د.ع</td><td class="px-4 py-3 font-500 text-blue-400">${escapeHtml(o.agent_name || 'مندوب')}</td><td class="px-4 py-3 font-500 text-slate-300"><span class="cursor-pointer hover:text-amber-400 transition" onclick='editOrderDate("${o.__backendId}")' title="انقر لتعديل التاريخ">📅 ${displayDate}</span></td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs ${statusClass} cursor-pointer hover:opacity-80 transition" onclick='openStatusModal("${o.__backendId}")' title="انقر لتغيير الحالة">${o.status}</span></td><td class="px-4 py-3 text-slate-400 max-w-[200px]"><span class="clickable-note" onclick='showFullNote("${escapeHtml(noteText).replace(/"/g, '&quot;')}", "${escapeHtml(o.customer_name)}")' title="انقر لعرض الملاحظة كاملة">${shortNote || '-'}</span></td><td class="px-4 py-3 flex gap-3">${actionsHtml}</td></tr>`;
   }).join('');
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
