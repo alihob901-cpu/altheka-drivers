@@ -597,24 +597,41 @@ def settle_agent(agent_id):
         agent = agent_result.data[0]
         agent_name = agent.get('agent_name')
         
-        # حساب إجمالي الأرباح فقط (بدون حذف)
+        # جلب الطلبات الواصلة للمندوب
         orders_result = supabase.table('orders').select('*').eq('agent_name', agent_name).eq('status', 'واصل').execute()
         orders = orders_result.data if orders_result.data else []
+        
+        if not orders:
+            return jsonify({"success": False, "error": "لا توجد أرباح مستحقة لهذا المندوب"}), 400
+        
+        # حساب إجمالي الأرباح قبل التصفير
         total_profit = sum(order.get('profit', 0) for order in orders)
         
-        # تسجيل عملية السداد فقط (بدون حذف الطلبات)
+        if paid_amount <= 0:
+            return jsonify({"success": False, "error": "الرجاء إدخال مبلغ السداد"}), 400
+        
+        if paid_amount > total_profit:
+            return jsonify({"success": False, "error": f"المبلغ المدخل أكبر من إجمالي الأرباح ({total_profit:,.0f} د.ع)"}), 400
+        
+        # ✅ تصفير أرباح الطلبات الواصلة (بدون حذف الطلبات)
+        for order in orders:
+            supabase.table('orders').update({
+                "profit": 0,
+                "updated_at": datetime.now().isoformat()
+            }).eq('__backendId', order['__backendId']).execute()
+        
+        # تسجيل عملية السداد
         add_notification_to_db(
             'سداد أرباح',
-            f'تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name} (إجمالي الأرباح المستحقة: {total_profit:,.0f} د.ع)',
+            f'تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name} (تم تصفير أرباح {len(orders)} طلب)',
             'settlement'
         )
-        
-        # ❌ تمت إزالة كود حذف الطلبات بالكامل
         
         return jsonify({
             "success": True,
             "message": f"تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name}",
-            "total_profit": total_profit
+            "orders_cleared": len(orders),
+            "total_profit_cleared": total_profit
         })
         
     except Exception as e:
