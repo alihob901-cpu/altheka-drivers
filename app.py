@@ -597,26 +597,24 @@ def settle_agent(agent_id):
         agent = agent_result.data[0]
         agent_name = agent.get('agent_name')
         
+        # حساب إجمالي الأرباح فقط (بدون حذف)
         orders_result = supabase.table('orders').select('*').eq('agent_name', agent_name).eq('status', 'واصل').execute()
         orders = orders_result.data if orders_result.data else []
+        total_profit = sum(order.get('profit', 0) for order in orders)
         
-        deleted_count = 0
-        for order in orders:
-            if order.get('__backendId'):
-                delete_or_cancel_shipment_in_jenni(order.get('__backendId'))
-            supabase.table('orders').delete().eq('__backendId', order.get('__backendId')).execute()
-            deleted_count += 1
-        
+        # تسجيل عملية السداد فقط (بدون حذف الطلبات)
         add_notification_to_db(
             'سداد أرباح',
-            f'تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name} وتم حذف {deleted_count} طلب',
+            f'تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name} (إجمالي الأرباح المستحقة: {total_profit:,.0f} د.ع)',
             'settlement'
         )
+        
+        # ❌ تمت إزالة كود حذف الطلبات بالكامل
         
         return jsonify({
             "success": True,
             "message": f"تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name}",
-            "deleted_orders": deleted_count
+            "total_profit": total_profit
         })
         
     except Exception as e:
