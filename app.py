@@ -597,26 +597,41 @@ def settle_agent(agent_id):
         agent = agent_result.data[0]
         agent_name = agent.get('agent_name')
         
+        # جلب الطلبات الواصلة للمندوب
         orders_result = supabase.table('orders').select('*').eq('agent_name', agent_name).eq('status', 'واصل').execute()
         orders = orders_result.data if orders_result.data else []
         
-        deleted_count = 0
-        for order in orders:
-            if order.get('__backendId'):
-                delete_or_cancel_shipment_in_jenni(order.get('__backendId'))
-            supabase.table('orders').delete().eq('__backendId', order.get('__backendId')).execute()
-            deleted_count += 1
+        if not orders:
+            return jsonify({"success": False, "error": "لا توجد أرباح مستحقة لهذا المندوب"}), 400
         
+        # حساب إجمالي الأرباح قبل التصفير
+        total_profit = sum(order.get('profit', 0) for order in orders)
+        
+        if paid_amount <= 0:
+            return jsonify({"success": False, "error": "الرجاء إدخال مبلغ السداد"}), 400
+        
+        if paid_amount > total_profit:
+            return jsonify({"success": False, "error": f"المبلغ المدخل أكبر من إجمالي الأرباح ({total_profit:,.0f} د.ع)"}), 400
+        
+        # ✅ تصفير أرباح الطلبات الواصلة (بدون حذف الطلبات)
+        for order in orders:
+            supabase.table('orders').update({
+                "profit": 0,
+                "updated_at": datetime.now().isoformat()
+            }).eq('__backendId', order['__backendId']).execute()
+        
+        # تسجيل عملية السداد
         add_notification_to_db(
             'سداد أرباح',
-            f'تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name} وتم حذف {deleted_count} طلب',
+            f'تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name} (تم تصفير أرباح {len(orders)} طلب)',
             'settlement'
         )
         
         return jsonify({
             "success": True,
             "message": f"تم تسديد {paid_amount:,.0f} د.ع للمندوب {agent_name}",
-            "deleted_orders": deleted_count
+            "orders_cleared": len(orders),
+            "total_profit_cleared": total_profit
         })
         
     except Exception as e:
@@ -672,6 +687,106 @@ def sync_deleted_shipments():
 def sync_cancelled_from_jenni():
     print("⚠️ [مزامنة ملغية] ميزة مزامنة الطلبات الملغية معطلة مؤقتاً")
     return
+
+# ============== دالة Polling التلقائي (جديد) ==============
+def sync_active_orders_from_jenni():
+    """جلب التحديثات لجميع الطلبات النشطة من نظام الزعيم (Polling تلقائي)"""
+    print(f"🔄 [POLLING] بدء جلب تحديثات الطلبات النشطة من الزعيم - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    if not supabase:
+        print("❌ Supabase غير متصل")
+        return
+    
+    token = jenni_get_token()
+    if not token:
+        print("❌ فشل الحصول على توكن الزعيم")
+        return
+    
+    # جلب جميع الطلبات النشطة (غير المكتملة)
+    active_statuses = ['جديد', 'قيد التوصيل', 'راجع']
+    active_orders = []
+    
+    try:
+        for status in active_statuses:
+            result = supabase.table('orders').select('__backendId, jenni_shipment_id, customer_name, status').eq('status', status).execute()
+            if result.data:
+                active_orders.extend(result.data)
+        
+        # فقط الطلبات التي لها jenni_shipment_id
+        active_orders = [o for o in active_orders if o.get('jenni_shipment_id')]
+        
+        if not active_orders:
+            print("📭 لا توجد طلبات نشطة للمزامنة")
+            return
+        
+        print(f"📋 تم العثور على {len(active_orders)} طلب نشط")
+        
+        # خريطة تحويل الحالات
+        status_map = {
+            'DELIVERED': 'واصل',
+            'DELIVERED_PRICE_CHANGED': 'واصل',
+            'PARTIALLY_DELIVERED': 'واصل',
+            'OFD': 'قيد التوصيل',
+            'POSTPONED': 'قيد التوصيل',
+            'RTO_WH': 'راجع',
+            'RTO_WITH_DA': 'راجع',
+            'RTO_CONFIRMED': 'راجع',
+            'CANCELLED': 'ملغي'
+        }
+        
+        updated_count = 0
+        
+        for order in active_orders:
+            try:
+                response = requests.post(
+                    f"{JENNI_API_URL}/v2/shipments/query",
+                    json={"shipment_ids": [int(order['jenni_shipment_id'])]},
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json"
+                    },
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    shipments = result.get('shipments', [])
+                    
+                    for shipment in shipments:
+                        current_step = shipment.get('current_step')
+                        new_status = status_map.get(current_step)
+                        
+                        if new_status and order.get('status') != new_status:
+                            supabase.table('orders').update({
+                                "status": new_status,
+                                "updated_at": datetime.now().isoformat(),
+                                "jenni_last_update": datetime.now().isoformat()
+                            }).eq('__backendId', order['__backendId']).execute()
+                            
+                            updated_count += 1
+                            print(f"✅ [POLLING] تم تحديث الطلب {order['__backendId']} من {order['status']} إلى {new_status}")
+                            
+                            # إضافة إشعار بالنظام
+                            if order.get('customer_name'):
+                                add_notification_to_db(
+                                    'تحديث من الزعيم',
+                                    f'تم تحديث حالة طلب {order["customer_name"]} إلى {new_status}',
+                                    'status'
+                                )
+                else:
+                    print(f"⚠️ فشل الاستعلام للشحنة {order['jenni_shipment_id']}: {response.status_code}")
+                    
+            except Exception as e:
+                print(f"❌ خطأ في استعلام الشحنة {order['jenni_shipment_id']}: {e}")
+                continue
+        
+        if updated_count > 0:
+            print(f"✅ [POLLING] تم تحديث {updated_count} طلب")
+        else:
+            print("📭 [POLLING] لا توجد تحديثات جديدة")
+            
+    except Exception as e:
+        print(f"❌ خطأ في مزامنة الطلبات النشطة: {e}")
 
 @app.route('/api/sync-with-jenni', methods=['POST'])
 def sync_with_jenni():
@@ -1135,9 +1250,15 @@ def logout():
 # ============== تشغيل المهام المجدولة ==============
 def start_scheduler():
     scheduler = BackgroundScheduler()
+    
+    # مزامنة الحذف (الموجودة أصلاً)
     scheduler.add_job(func=sync_deleted_shipments, trigger="interval", hours=1, id='sync_deleted')
+    
+    # إضافة Polling التلقائي كل ساعة (جديد)
+    scheduler.add_job(func=sync_active_orders_from_jenni, trigger="interval", hours=1, id='polling_active_orders')
+    
     scheduler.start()
-    print("✅ تم تشغيل المجدول - سيتم مزامنة الحذف فقط كل ساعة")
+    print("✅ تم تشغيل المجدول - مزامنة الحذف وجلب تحديثات الطلبات النشطة كل ساعة")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
