@@ -1,5 +1,4 @@
-﻿import atexit
-from flask import Flask, render_template, request, jsonify, session, make_response
+﻿from flask import Flask, render_template, request, jsonify, session, make_response
 from flask_cors import CORS
 from supabase import create_client, Client
 import os
@@ -16,6 +15,7 @@ import threading
 import gc
 import signal
 import sys
+import atexit
 
 # تحميل المتغيرات البيئية
 load_dotenv()
