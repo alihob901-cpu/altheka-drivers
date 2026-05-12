@@ -77,11 +77,8 @@ const firebaseConfig = {
 const VAPID_KEY = "BA2ONQejtLqvY0xKKIy0WaG3SAc1CCVm1xqvUhHI1gzxxlqGq65sGei8OroEqAK1haxQygk_2cp8Ugf-jyt3tWA";
 const DEFAULT_AGENT_PROFIT = 1000;
 
-// ✅ قائمة المحافظات الكاملة
+// ✅ قائمة المحافظات الكاملة (تمت إضافة السليمانية ودهوك)
 const FALLBACK_GOVERNORATES = ['بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء', 'ذي قار', 'ميسان', 'بابل', 'واسط', 'صلاح الدين', 'ديالى', 'المثنى', 'القادسية', 'السليمانية', 'دهوك'];
-
-// ✅ قائمة الحالات بناءً على الوثيقة الرسمية
-const ALL_STATUSES = ['جديد', 'قيد التوصيل', 'واصل', 'راجع', 'ملغي', 'مؤجل'];
 
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
@@ -243,7 +240,7 @@ async function confirmSettleAgent() {
         return;
     }
     
-    if (!confirm(`هل أنت متأكد من تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}؟\n\nسيتم تصفير أرباح الطلبات الواصلة.`)) {
+    if (!confirm(`هل أنت متأكد من تسديد ${paidAmount.toLocaleString('ar-IQ')} د.ع للمندوب ${agentName}؟\n\nسيتم حذف ${agentOrders.length} طلب واصل من سجل المندوب.`)) {
         return;
     }
     
