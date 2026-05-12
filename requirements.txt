@@ -8,6 +8,7 @@ python-dotenv
 flask-cors
 firebase-admin
 apscheduler==3.11.2
+gunicorn==20.1.0
 
 
 
