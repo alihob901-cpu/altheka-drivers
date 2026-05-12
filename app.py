@@ -1,4 +1,5 @@
-﻿from flask import Flask, render_template, request, jsonify, session, make_response
+﻿import atexit
+from flask import Flask, render_template, request, jsonify, session, make_response
 from flask_cors import CORS
 from supabase import create_client, Client
 import os
