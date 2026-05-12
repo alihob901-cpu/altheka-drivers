@@ -688,7 +688,7 @@ def sync_cancelled_from_jenni():
     print("⚠️ [مزامنة ملغية] ميزة مزامنة الطلبات الملغية معطلة مؤقتاً")
     return
 
-# ============== دالة Polling التلقائي ==============
+# ============== دالة Polling التلقائي (جديد) ==============
 def sync_active_orders_from_jenni():
     """جلب التحديثات لجميع الطلبات النشطة من نظام الزعيم (Polling تلقائي)"""
     print(f"🔄 [POLLING] بدء جلب تحديثات الطلبات النشطة من الزعيم - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -703,7 +703,7 @@ def sync_active_orders_from_jenni():
         return
     
     # جلب جميع الطلبات النشطة (غير المكتملة)
-    active_statuses = ['جديد', 'قيد التوصيل', 'راجع', 'مؤجل']
+    active_statuses = ['جديد', 'قيد التوصيل', 'راجع']
     active_orders = []
     
     try:
@@ -721,43 +721,17 @@ def sync_active_orders_from_jenni():
         
         print(f"📋 تم العثور على {len(active_orders)} طلب نشط")
         
-        # خريطة تحويل الحالات بناءً على الوثيقة الرسمية
+        # خريطة تحويل الحالات
         status_map = {
-            # حالات التسليم الناجح
             'DELIVERED': 'واصل',
             'DELIVERED_PRICE_CHANGED': 'واصل',
             'PARTIALLY_DELIVERED': 'واصل',
-            'FORCE_DELIVERY': 'واصل',
-            'DELIVERED_ARCHIVED': 'واصل',
-            
-            # حالات قيد التوصيل والمراحل المتوسطة
             'OFD': 'قيد التوصيل',
-            'POSTPONED': 'مؤجل',
-            'POSTPONED_CONFIRMED': 'مؤجل',
-            'DELIVERY_REATTEMPT': 'قيد التوصيل',
-            'TRANSIT': 'قيد التوصيل',
-            'WITH_MA': 'قيد التوصيل',
-            'NEW_IN_TRANSIT': 'جديد',
-            'NEW_ORDER_TO_PRINT': 'جديد',
-            'NEW_ORDER_TO_PICKUP': 'جديد',
-            'NEW_WITH_PA': 'جديد',
-            'IN_SC': 'قيد التوصيل',
-            'PRINT_MANIFEST_DA': 'قيد التوصيل',
-            'PENDING_DELIVERY_APPROVAL': 'قيد التوصيل',
-            'BRANCH_PRINT_MANIFEST': 'قيد التوصيل',
-            'RTO_WITH_MA': 'راجع',
-            
-            # حالات المرتجع
+            'POSTPONED': 'قيد التوصيل',
             'RTO_WH': 'راجع',
             'RTO_WITH_DA': 'راجع',
             'RTO_CONFIRMED': 'راجع',
-            'RTO_ARCHIVED': 'راجع',
-            'RTO_FROM_BRANCH': 'راجع',
-            'RTO_IN_TRANSIT_WH': 'راجع',
-            'RTO_READY_FOR_BRANCH': 'راجع',
-            
-            # حالات الإلغاء والرفض
-            'REJECTED_PRICE_CHANGE': 'ملغي'
+            'CANCELLED': 'ملغي'
         }
         
         updated_count = 0
@@ -960,8 +934,7 @@ def update_data(item_id):
                     'واصل': '✅ طلب واصل',
                     'راجع': '↩️ طلب مرتجع',
                     'قيد التوصيل': '🚚 طلب قيد التوصيل',
-                    'ملغي': '❌ طلب ملغي',
-                    'مؤجل': '📅 طلب مؤجل'
+                    'ملغي': '❌ طلب ملغي'
                 }
                 title = titles.get(new_status, '📋 تحديث حالة الطلب')
                 body = f"تم تغيير حالة طلب {customer_name} إلى {new_status}"
@@ -1039,43 +1012,16 @@ def jenni_webhook():
             print(f"⚠️ نظام غير صالح: {system_code}")
             return jsonify({"success": False, "message": "Invalid system code"}), 401
         
-        # خريطة تحويل الحالات بناءً على الوثيقة الرسمية
         status_map = {
-            # حالات التسليم الناجح
             'DELIVERED': 'واصل',
             'DELIVERED_PRICE_CHANGED': 'واصل',
             'PARTIALLY_DELIVERED': 'واصل',
-            'FORCE_DELIVERY': 'واصل',
-            'DELIVERED_ARCHIVED': 'واصل',
-            
-            # حالات قيد التوصيل والمراحل المتوسطة
             'OFD': 'قيد التوصيل',
-            'POSTPONED': 'مؤجل',
-            'POSTPONED_CONFIRMED': 'مؤجل',
-            'DELIVERY_REATTEMPT': 'قيد التوصيل',
-            'TRANSIT': 'قيد التوصيل',
-            'WITH_MA': 'قيد التوصيل',
-            'NEW_IN_TRANSIT': 'جديد',
-            'NEW_ORDER_TO_PRINT': 'جديد',
-            'NEW_ORDER_TO_PICKUP': 'جديد',
-            'NEW_WITH_PA': 'جديد',
-            'IN_SC': 'قيد التوصيل',
-            'PRINT_MANIFEST_DA': 'قيد التوصيل',
-            'PENDING_DELIVERY_APPROVAL': 'قيد التوصيل',
-            'BRANCH_PRINT_MANIFEST': 'قيد التوصيل',
-            'RTO_WITH_MA': 'راجع',
-            
-            # حالات المرتجع
+            'POSTPONED': 'قيد التوصيل',
             'RTO_WH': 'راجع',
             'RTO_WITH_DA': 'راجع',
             'RTO_CONFIRMED': 'راجع',
-            'RTO_ARCHIVED': 'راجع',
-            'RTO_FROM_BRANCH': 'راجع',
-            'RTO_IN_TRANSIT_WH': 'راجع',
-            'RTO_READY_FOR_BRANCH': 'راجع',
-            
-            # حالات الإلغاء والرفض
-            'REJECTED_PRICE_CHANGE': 'ملغي'
+            'CANCELLED': 'ملغي'
         }
         
         updated_count = 0
@@ -1308,7 +1254,7 @@ def start_scheduler():
     # مزامنة الحذف (الموجودة أصلاً)
     scheduler.add_job(func=sync_deleted_shipments, trigger="interval", hours=1, id='sync_deleted')
     
-    # إضافة Polling التلقائي كل ساعة
+    # إضافة Polling التلقائي كل ساعة (جديد)
     scheduler.add_job(func=sync_active_orders_from_jenni, trigger="interval", hours=1, id='polling_active_orders')
     
     scheduler.start()
