@@ -1047,44 +1047,20 @@ function renderReports() {
 function exportCSV() { if (!allOrders.length) { showToast('لا توجد بيانات'); return; } const headers = ['الزبون','الهاتف','العنوان','المنتج','الكمية','السعر','الإجمالي','المندوب','التاريخ','الحالة','الملاحظات']; const rows = allOrders.map(o => [o.customer_name, o.customer_phone, o.customer_address, o.product_info || o.product, o.quantity, o.price, o.total, o.agent_name, o.order_date || '', o.status, o.admin_notes || '']); const csv = '\uFEFF' + [headers, ...rows].map(r => r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'orders.csv'; a.click(); showToast('📥 تم التصدير'); }
 
 function showNewOrderModal() { 
-    console.log('🔧 محاولة فتح نافذة الطلب الجديد');
-    
-    const modal = document.getElementById('orderModal');
-    if (!modal) {
-        console.error('❌ orderModal غير موجود في الصفحة');
-        showToast('خطأ: النافذة غير موجودة');
-        return;
-    }
-    
-    modal.classList.remove('hidden');
-    
-    const form = document.getElementById('orderForm');
-    if (form) form.reset();
-    
-    const qtyInput = document.getElementById('f_qty');
-    if (qtyInput) qtyInput.value = '1';
-    
-    const today = new Date().toISOString().split('T')[0];
-    const dateInput = document.getElementById('f_date');
-    if (dateInput) dateInput.value = today;
-    
-    loadGovernorates().catch(err => console.warn('تحميل المحافظات:', err));
-    
-    console.log('✅ تم فتح النافذة بنجاح');
+    document.getElementById('orderModal').classList.remove('hidden'); 
+    document.getElementById('orderForm').reset(); 
+    document.getElementById('f_qty').value = '1'; 
+    const today = new Date().toISOString().split('T')[0]; 
+    document.getElementById('f_date').value = today; 
+    loadGovernorates();
 }
-
-function closeOrderModal() { 
-    const modal = document.getElementById('orderModal');
-    if (modal) modal.classList.add('hidden'); 
-}
+function closeOrderModal() { document.getElementById('orderModal').classList.add('hidden'); }
 
 async function handleOrderSubmit(e) { 
   e.preventDefault(); 
   const btn = e.target.querySelector('button[type="submit"]'); 
-  if (btn) {
-    btn.disabled = true; 
-    btn.textContent = 'جاري الحفظ...';
-  }
+  btn.disabled = true; 
+  btn.textContent = 'جاري الحفظ...'; 
   
   const qty = parseInt(document.getElementById('f_qty').value) || 1; 
   const price = parseFloat(document.getElementById('f_price').value) || 0; 
@@ -1129,10 +1105,8 @@ async function handleOrderSubmit(e) {
     created_at: new Date().toISOString() 
   }); 
   
-  if (btn) {
-    btn.disabled = false; 
-    btn.textContent = 'حفظ الطلب';
-  }
+  btn.disabled = false; 
+  btn.textContent = 'حفظ الطلب'; 
   
   if (result.isOk) { 
     closeOrderModal(); 
