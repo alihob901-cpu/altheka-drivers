@@ -857,15 +857,47 @@ def get_all_data():
     try:
         if not supabase:
             return []
+        
+        # ✅ جلب جميع الطلبات
         orders = supabase.table('orders').select('*').execute()
+        
+        # ✅ تأكد من أن الطلب موجود
+        target_id = '1778657796206'
+        found = False
+        
+        order_list = []
+        if orders.data:
+            for order in orders.data:
+                # تحويل __backendId إلى string للمقارنة
+                order_id = str(order.get('__backendId', ''))
+                if order_id == target_id:
+                    print(f"✅ تم العثور على الطلب {target_id} في النتائج")
+                    found = True
+                order_list.append(order)
+        
+        if not found:
+            print(f"⚠️ الطلب {target_id} غير موجود في النتائج، محاولة جلب مباشر...")
+            # محاولة جلب الطلب مباشرة
+            specific_order = supabase.table('orders').select('*').eq('__backendId', target_id).execute()
+            if specific_order.data:
+                print(f"✅ تم جلب الطلب {target_id} مباشرة")
+                order_list.append(specific_order.data[0])
+            else:
+                print(f"❌ الطلب {target_id} غير موجود في قاعدة البيانات!")
+        
+        # جلب المندوبين
         agents = supabase.table('agents').select('*').execute()
         
-        for o in (orders.data or []):
+        # إضافة type لكل عنصر
+        for o in order_list:
             o['type'] = 'order'
         for a in (agents.data or []):
             a['type'] = 'agent'
         
-        return (orders.data or []) + (agents.data or [])
+        result = order_list + (agents.data or [])
+        print(f"📊 إجمالي العناصر المرسلة: {len(result)} (طلبات: {len(order_list)}, مندوبين: {len(agents.data or [])})")
+        
+        return result
     except Exception as e:
         print(f"❌ خطأ في جلب البيانات: {e}")
         return []
