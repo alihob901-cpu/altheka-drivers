@@ -613,7 +613,11 @@ async function cancelInJenni(shipmentNumber, reason) {
 const dataHandler = {
   onDataChanged(data) {
     console.log("🔔 [DATA] تحديث البيانات");
+    console.log("🔍 [DATA] عدد العناصر القادمة من SDK:", data ? data.length : 0);
+    
     const allOrdersRaw = data.filter(d => d.type === 'order' || !d.type);
+    console.log("🔍 [DATA] عدد الطلبات بعد التصفية (allOrdersRaw):", allOrdersRaw.length);
+    
     allAgents = data.filter(d => d.type === 'agent');
     
     // ✅ تصفية الطلبات حسب نوع المستخدم
@@ -622,6 +626,9 @@ const dataHandler = {
       const currentAgentName = (currentUser.agent_name || '').trim();
       allOrders = allOrdersRaw.filter(o => (o.agent_name || '').trim() === currentAgentName);
       console.log('🔍 [DEBUG] وضع المندوب - طلباته فقط:', currentAgentName, 'العدد:', allOrders.length);
+      
+      // ✅ عرض أسماء الطلبات للمندوب
+      console.log('🔍 [DEBUG] أسماء الطلبات للمندوب:', allOrders.map(o => o.customer_name));
     } else {
       // للمدير: يعرض جميع الطلبات
       allOrders = allOrdersRaw;
