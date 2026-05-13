@@ -656,7 +656,7 @@ function showProgrammerInfo() {
 function copyToClipboard(text) { navigator.clipboard.writeText(text).then(() => showToast(`✅ تم نسخ: ${text}`)).catch(() => showToast('❌ فشل النسخ')); }
 
 let autoRefreshInterval = null;
-function startAutoRefresh() { if (autoRefreshInterval) clearInterval(autoRefreshInterval); autoRefreshInterval = setInterval(() => { if (window.dataSdk && window.dataSdk.loadData) window.dataSdk.loadData(); }, 30000); }
+function startAutoRefresh() { if (autoRefreshInterval) clearInterval(autoRefreshInterval); autoRefreshInterval = setInterval(() => { if (window.dataSdk && window.dataSdk.loadData) window.dataSdk.loadData(); }, 10000); }
 startAutoRefresh();
 
 function toggleTodayFilter() {
