@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 import json
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.interval import IntervalTrigger
 import time
 import uuid
 from functools import wraps
@@ -30,61 +29,21 @@ app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400
 
-# ============== تحسين إدارة الجلسات ==============
-active_sessions_cache = {}
-SESSION_CACHE_TTL = 300
-
-def store_session_in_db(session_id, user_id, user_data):
-    try:
-        if supabase:
-            expires_at = (datetime.now() + timedelta(hours=24)).isoformat()
-            supabase.table('active_sessions').upsert({
-                'session_id': session_id,
-                'user_id': user_id,
-                'user_data': json.dumps(user_data),
-                'created_at': datetime.now().isoformat(),
-                'expires_at': expires_at,
-                'last_accessed': datetime.now().isoformat()
-            }, on_conflict='session_id').execute()
-            return True
-    except Exception as e:
-        print(f"⚠️ خطأ في تخزين الجلسة: {e}")
-    return False
-
-def get_session_from_db(session_id):
-    try:
-        if supabase:
-            result = supabase.table('active_sessions').select('*').eq('session_id', session_id).execute()
-            if result.data:
-                session_data = result.data[0]
-                if datetime.fromisoformat(session_data['expires_at']) > datetime.now():
-                    return session_data
-                else:
-                    supabase.table('active_sessions').delete().eq('session_id', session_id).execute()
-    except Exception as e:
-        print(f"⚠️ خطأ في استرجاع الجلسة: {e}")
-    return None
-
-def cleanup_expired_sessions():
-    try:
-        if supabase:
-            result = supabase.table('active_sessions').delete().lt('expires_at', datetime.now().isoformat()).execute()
-            if result.data:
-                print(f"✅ تم تنظيف {len(result.data)} جلسة منتهية")
-    except Exception as e:
-        print(f"⚠️ خطأ في تنظيف الجلسات: {e}")
+# تخزين الجلسات النشطة
+active_sessions = {}
 
 # ============== إعداد Supabase ==============
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://zmzotoutdeeizyfoikfw.supabase.co")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "sb_publishable_BqRz02wzKGRblUsM05DnOA_ovErV7U2")
 
-# ============== إعداد نظام الزعيم ==============
+# ============== إعداد نظام الزعيم (Jenni Logistics) ==============
 JENNI_API_URL = "https://jenni.alzaeemexp.com/api"
 JENNI_USERNAME = os.getenv("JENNI_USERNAME", "07717798622")
 JENNI_PASSWORD = os.getenv("JENNI_PASSWORD", "30007000")
 JENNI_SYSTEM_CODE = os.getenv("JENNI_SYSTEM_CODE", "ECOMMERCE_STORE_01")
 JENNI_WEBHOOK_TOKEN = os.getenv("JENNI_WEBHOOK_TOKEN", "TrustCenterSecretKey123")
 
+# متغير لتخزين JWT token من الزعيم
 jenni_jwt_token = None
 jenni_token_expiry = None
 jenni_token_lock = threading.Lock()
@@ -177,31 +136,21 @@ except Exception as e:
 # ============== دوال الأمان ==============
 
 def invalidate_all_sessions():
-    try:
-        if supabase:
-            supabase.table('active_sessions').delete().neq('session_id', '0').execute()
-        active_sessions_cache.clear()
-        print("✅ تم إبطال جميع الجلسات النشطة")
-    except Exception as e:
-        print(f"⚠️ خطأ في إبطال الجلسات: {e}")
+    global active_sessions
+    active_sessions.clear()
+    print("✅ تم إبطال جميع الجلسات النشطة")
 
 def session_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         session_id = request.cookies.get('session_id')
-        if not session_id:
+        user_id = session.get('user_id')
+        
+        if not session_id or not user_id:
             return jsonify({"error": "غير مصرح به", "code": "UNAUTHORIZED"}), 401
         
-        session_data = get_session_from_db(session_id)
-        if not session_data:
-            return jsonify({"error": "الجلسة منتهية أو غير صالحة", "code": "SESSION_EXPIRED"}), 401
-        
-        try:
-            supabase.table('active_sessions').update({
-                'last_accessed': datetime.now().isoformat()
-            }).eq('session_id', session_id).execute()
-        except:
-            pass
+        if user_id not in active_sessions or session_id not in active_sessions.get(user_id, []):
+            return jsonify({"error": "تم تسجيل الخروج من جميع الأجهزة", "code": "SESSION_INVALIDATED"}), 401
         
         return f(*args, **kwargs)
     return decorated_function
@@ -286,15 +235,15 @@ def change_admin_password():
 @app.route('/api/active-sessions', methods=['GET'])
 def get_active_sessions():
     try:
-        session_count = 0
-        if supabase:
-            result = supabase.table('active_sessions').select('*', count='exact').execute()
-            session_count = result.count if hasattr(result, 'count') else 0
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header:
+            return jsonify({"error": "غير مصرح به"}), 401
         
+        session_count = sum(len(sessions) for sessions in active_sessions.values())
         return jsonify({
             "success": True,
             "active_sessions_count": session_count,
-            "users": []
+            "users": list(active_sessions.keys())
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -603,10 +552,10 @@ def settle_agent(agent_id):
         print(f"❌ خطأ: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-# ============== وظائف المزامنة (بدون حدود) ==============
+# ============== وظيفة المزامنة الأساسية (التي كانت تعمل في الملف القديم) ==============
 def sync_deleted_shipments():
-    """مزامنة الحذف مع نظام الزعيم - بدون حدود للطلبات"""
-    print(f"🔄 [SYNC] بدء مزامنة الحذف - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    """مزامنة الحذف مع نظام الزعيم - نفس الكود الذي كان يعمل"""
+    print(f"🔄 [مزامنة] بدء مزامنة الحذف مع نظام الزعيم - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     if not supabase:
         return
@@ -617,25 +566,8 @@ def sync_deleted_shipments():
             return
         
         deleted_count = 0
-        # ✅ بدون حد - جلب جميع الطلبات
+        # ✅ بدون limit - جلب جميع الطلبات (مثل الملف القديم)
         local_orders = supabase.table('orders').select('__backendId, jenni_shipment_id').execute()
-        
-        # إذا كان هناك أكثر من 1000 طلب، استخدم pagination للحصول على الكل
-        if len(local_orders.data) > 500:
-            print(f"📊 عدد الطلبات كبير ({len(local_orders.data)}), استخدام pagination...")
-            page_size = 500
-            offset = 0
-            all_orders = []
-            while True:
-                batch = supabase.table('orders')\
-                    .select('__backendId, jenni_shipment_id')\
-                    .range(offset, offset + page_size - 1)\
-                    .execute()
-                if not batch.data:
-                    break
-                all_orders.extend(batch.data)
-                offset += page_size
-            local_orders.data = all_orders
         
         print(f"📋 جاري فحص {len(local_orders.data)} طلب...")
         
@@ -663,149 +595,26 @@ def sync_deleted_shipments():
         
         if deleted_count > 0:
             add_notification_to_db('مزامنة مع الزعيم', f'تم حذف {deleted_count} طلب غير موجود في الزعيم', 'status')
-            print(f"✅ [SYNC] تم حذف {deleted_count} طلب غير موجود في الزعيم")
+            print(f"✅ تم حذف {deleted_count} طلب غير موجود في الزعيم")
         else:
-            print(f"✅ [SYNC] لا توجد طلبات محذوفة في الزعيم")
+            print("✅ لا توجد طلبات محذوفة في الزعيم")
             
     except Exception as e:
         print(f"❌ خطأ في مزامنة الحذف: {e}")
 
-def sync_active_orders_from_jenni():
-    """جلب تحديثات الطلبات النشطة من نظام الزعيم (Polling) - بدون حدود"""
-    print(f"🔄 [POLLING] بدء جلب تحديثات الطلبات - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    if not supabase:
-        return
-    
-    token = jenni_get_token()
-    if not token:
-        return
-    
-    active_statuses = ['جديد', 'قيد التوصيل', 'راجع', 'مؤجل']
-    active_orders = []
-    
-    try:
-        for status in active_statuses:
-            # ✅ بدون حد - جلب جميع الطلبات النشطة
-            result = supabase.table('orders').select('__backendId, jenni_shipment_id, customer_name, status').eq('status', status).execute()
-            if result.data:
-                active_orders.extend(result.data)
-        
-        active_orders = [o for o in active_orders if o.get('jenni_shipment_id')]
-        
-        if not active_orders:
-            print("📭 لا توجد طلبات نشطة للمزامنة")
-            return
-        
-        print(f"📋 تم العثور على {len(active_orders)} طلب نشط")
-        
-        status_map = {
-            'DELIVERED': 'واصل', 'DELIVERED_PRICE_CHANGED': 'واصل',
-            'PARTIALLY_DELIVERED': 'واصل', 'FORCE_DELIVERY': 'واصل',
-            'OFD': 'قيد التوصيل', 'POSTPONED': 'مؤجل',
-            'DELIVERY_REATTEMPT': 'قيد التوصيل', 'TRANSIT': 'قيد التوصيل',
-            'RTO_WH': 'راجع', 'RTO_WITH_DA': 'راجع', 'RTO_CONFIRMED': 'راجع',
-            'CANCELLED': 'ملغي', 'REJECTED_PRICE_CHANGE': 'ملغي'
-        }
-        
-        updated_count = 0
-        deleted_count = 0
-        
-        for order in active_orders:
-            try:
-                response = requests.post(
-                    f"{JENNI_API_URL}/v2/shipments/query",
-                    json={"shipment_ids": [int(order['jenni_shipment_id'])]},
-                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                    timeout=30
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    shipments = result.get('shipments', [])
-                    
-                    if not shipments:
-                        # الطلب غير موجود في الزعيم - يجب حذفه
-                        supabase.table('orders').delete().eq('__backendId', order['__backendId']).execute()
-                        deleted_count += 1
-                        print(f"🗑️ [POLLING] تم حذف الطلب {order['__backendId']} (غير موجود في الزعيم)")
-                    else:
-                        for shipment in shipments:
-                            current_step = shipment.get('current_step')
-                            new_status = status_map.get(current_step)
-                            
-                            if new_status and order.get('status') != new_status:
-                                supabase.table('orders').update({
-                                    "status": new_status,
-                                    "updated_at": datetime.now().isoformat(),
-                                    "jenni_last_update": datetime.now().isoformat()
-                                }).eq('__backendId', order['__backendId']).execute()
-                                
-                                updated_count += 1
-                                print(f"✅ [POLLING] تم تحديث الطلب {order['__backendId']} من {order['status']} إلى {new_status}")
-                                
-            except Exception as e:
-                print(f"❌ خطأ في استعلام الشحنة {order['__backendId']}: {e}")
-                continue
-        
-        if updated_count > 0:
-            print(f"✅ [POLLING] تم تحديث {updated_count} طلب")
-        if deleted_count > 0:
-            print(f"🗑️ [POLLING] تم حذف {deleted_count} طلب غير موجود في الزعيم")
-        if updated_count == 0 and deleted_count == 0:
-            print("📭 [POLLING] لا توجد تحديثات جديدة")
-            
-    except Exception as e:
-        print(f"❌ خطأ في مزامنة الطلبات النشطة: {e}")
-
 @app.route('/api/sync-with-jenni', methods=['POST'])
 def sync_with_jenni():
     try:
-        print("🔄 [API] بدء مزامنة يدوية...")
+        print("🔄 بدء مزامنة يدوية...")
         sync_deleted_shipments()
         return jsonify({"success": True, "message": "تمت المزامنة بنجاح"})
     except Exception as e:
         print(f"❌ خطأ في المزامنة: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-# ============== Webhook لاستقبال إشعارات الحذف من الزعيم ==============
-@app.route('/api/webhook/shipment-deleted', methods=['POST'])
-def webhook_shipment_deleted():
-    """يتم استدعاؤها من نظام الزعيم عند حذف شحنة"""
-    try:
-        data = request.get_json()
-        print(f"📬 [WEBHOOK] استلام إشعار حذف من الزعيم: {data}")
-        
-        shipment_id = data.get('shipment_id')
-        shipment_number = data.get('shipment_number')
-        
-        if not shipment_id and not shipment_number:
-            return jsonify({"success": False, "error": "No shipment identifier"}), 400
-        
-        # البحث عن الطلب في قاعدة البيانات
-        if supabase:
-            if shipment_number:
-                order = supabase.table('orders').select('*').eq('__backendId', shipment_number).execute()
-            elif shipment_id:
-                order = supabase.table('orders').select('*').eq('jenni_shipment_id', str(shipment_id)).execute()
-            else:
-                return jsonify({"success": False, "error": "No identifier"}), 400
-            
-            if order.data:
-                # حذف الطلب من قاعدة البيانات
-                supabase.table('orders').delete().eq('__backendId', order.data[0]['__backendId']).execute()
-                print(f"✅ [WEBHOOK] تم حذف الطلب {shipment_number or shipment_id} من قاعدة البيانات")
-                add_notification_to_db('حذف من الزعيم', f'تم حذف طلب {order.data[0].get("customer_name", "زبون")} من نظام الزعيم', 'status')
-                return jsonify({"success": True, "message": "Order deleted"})
-            else:
-                print(f"⚠️ [WEBHOOK] الطلب {shipment_number or shipment_id} غير موجود في قاعدة البيانات")
-                return jsonify({"success": True, "message": "Order not found"})
-        
-        return jsonify({"success": False, "error": "No database connection"}), 500
-        
-    except Exception as e:
-        print(f"❌ خطأ في webhook: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+@app.route('/api/sync-cancelled-from-jenni', methods=['POST'])
+def api_sync_cancelled_from_jenni():
+    return jsonify({"success": True, "message": "الميزة معطلة مؤقتاً", "updated_count": 0}), 200
 
 # ============== دوال الإشعارات ==============
 def send_fcm_notification_via_admin(fcm_token, title, body, data=None):
@@ -826,7 +635,7 @@ def send_fcm_notification_via_admin(fcm_token, title, body, data=None):
         messaging.send(message)
         return True
     except Exception as e:
-        print(f"❌ خطأ: {e}")
+        print(f"❌ خطأ في الإشعار: {e}")
         return False
 
 def send_fcm_notification_via_legacy(fcm_token, title, body, data=None):
@@ -841,7 +650,7 @@ def send_fcm_notification_via_legacy(fcm_token, title, body, data=None):
         response = requests.post(url, headers=headers, json=notification_data)
         return response.status_code == 200
     except Exception as e:
-        print(f"❌ خطأ: {e}")
+        print(f"❌ خطأ في الإشعار: {e}")
         return False
 
 def send_notification_to_user(user_id, title, body, order_id=None):
@@ -898,28 +707,19 @@ def add_data():
         table_name = 'agents' if new_item.get('type') == 'agent' else 'orders'
         
         insert_item = {k: v for k, v in new_item.items() if k not in ['governorate', 'district', 'governorate_code']}
-        
         result = supabase.table(table_name).insert(insert_item).execute()
         
         if result.data:
             if table_name == 'orders' and new_item.get('status') == 'جديد':
                 print("🚀 بدء إرسال الطلب إلى نظام الزعيم...")
-                try:
-                    jenni_result = create_shipment_in_jenni(new_item)
-                    if jenni_result.get("success") and jenni_result.get("shipment_id"):
-                        supabase.table('orders').update({
-                            "jenni_shipment_id": str(jenni_result["shipment_id"])
-                        }).eq('__backendId', new_item['__backendId']).execute()
-                        print(f"✅ تم إرسال الطلب إلى نظام الزعيم بنجاح")
-                    else:
-                        print(f"⚠️ فشل إرسال الطلب إلى الزعيم: {jenni_result.get('error')}")
-                        add_to_pending_queue(new_item)
-                except Exception as e:
-                    print(f"❌ خطأ في إرسال الطلب للزعيم: {e}")
+                jenni_result = create_shipment_in_jenni(new_item)
+                if jenni_result.get("success") and jenni_result.get("shipment_id"):
+                    supabase.table('orders').update({"jenni_shipment_id": str(jenni_result["shipment_id"])}).eq('__backendId', new_item['__backendId']).execute()
+                    print(f"📤 تم إرسال الطلب إلى نظام الزعيم بنجاح")
+                else:
+                    print(f"⚠️ فشل إرسال الطلب إلى الزعيم: {jenni_result.get('error')}")
                     add_to_pending_queue(new_item)
-            
             return jsonify({'isOk': True, 'data': result.data[0]}), 201
-        
         return jsonify({'isOk': False, 'error': 'Failed to save'}), 500
     except Exception as e:
         print(f"API Error POST: {e}")
@@ -1021,45 +821,46 @@ def jenni_webhook():
         token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
         
         if token != JENNI_WEBHOOK_TOKEN:
+            print(f"⚠️ توكن غير صالح: {token}")
             return jsonify({"success": False, "message": "Invalid token"}), 401
         
         data = request.get_json()
+        print(f"📬 استلام تحديث من نظام الزعيم: {data}")
         
         if not data:
+            print("❌ لا توجد بيانات في الطلب")
             return jsonify({"success": False, "message": "No data"}), 400
         
         system_code = data.get('system_code')
         updates = data.get('updates', [])
         
         if system_code != JENNI_SYSTEM_CODE:
+            print(f"⚠️ نظام غير صالح: {system_code}")
             return jsonify({"success": False, "message": "Invalid system code"}), 401
         
         status_map = {
-            'DELIVERED': 'واصل', 'DELIVERED_PRICE_CHANGED': 'واصل',
-            'PARTIALLY_DELIVERED': 'واصل', 'FORCE_DELIVERY': 'واصل',
-            'OFD': 'قيد التوصيل', 'POSTPONED': 'مؤجل',
-            'DELIVERY_REATTEMPT': 'قيد التوصيل', 'TRANSIT': 'قيد التوصيل',
-            'RTO_WH': 'راجع', 'RTO_WITH_DA': 'راجع', 'RTO_CONFIRMED': 'راجع',
-            'CANCELLED': 'ملغي', 'REJECTED_PRICE_CHANGE': 'ملغي'
+            'DELIVERED': 'واصل',
+            'DELIVERED_PRICE_CHANGED': 'واصل',
+            'PARTIALLY_DELIVERED': 'واصل',
+            'OFD': 'قيد التوصيل',
+            'POSTPONED': 'مؤجل',
+            'RTO_WH': 'راجع',
+            'RTO_WITH_DA': 'راجع',
+            'RTO_CONFIRMED': 'راجع',
+            'CANCELLED': 'ملغي'
         }
         
         updated_count = 0
-        deleted_count = 0
         
         for update in updates:
             shipment_number = update.get('shipment_number')
             current_step = update.get('current_step')
+            current_step_ar = update.get('current_step_ar')
             note = update.get('note')
             
-            # إذا كان الإجراء حذف
-            if current_step == 'DELETED':
-                if supabase and shipment_number:
-                    supabase.table('orders').delete().eq('__backendId', shipment_number).execute()
-                    deleted_count += 1
-                    print(f"🗑️ تم حذف الطلب {shipment_number} من قاعدة البيانات (webhook)")
-                continue
+            print(f"📦 تحديث للطلب {shipment_number}: {current_step} - {current_step_ar}")
             
-            new_status = status_map.get(current_step)
+            new_status = status_map.get(current_step, None)
             
             if new_status and supabase and shipment_number:
                 result = supabase.table('orders').update({
@@ -1071,14 +872,23 @@ def jenni_webhook():
                 
                 if result.data:
                     updated_count += 1
-                    print(f"✅ تم تحديث الطلب {shipment_number} إلى {new_status}")
+                    print(f"✅ تم تحديث حالة الطلب {shipment_number} إلى {new_status}")
+                    
+                    order = result.data[0]
+                    agent_name = order.get('agent_name')
+                    if agent_name and agent_name not in ['admin', 'المدير العام']:
+                        customer_name = order.get('customer_name', '')
+                        send_notification_to_user(
+                            agent_name,
+                            f"تحديث حالة الطلب",
+                            f"تم تغيير حالة طلب {customer_name} إلى {new_status}",
+                            shipment_number
+                        )
+            else:
+                print(f"⚠️ لم يتم تحديث الطلب {shipment_number}: الحالة={current_step}, new_status={new_status}")
         
-        if deleted_count > 0:
-            print(f"🗑️ تم حذف {deleted_count} طلب من قاعدة البيانات")
-        if updated_count > 0:
-            print(f"✅ تم تحديث {updated_count} طلب")
-        
-        return jsonify({"success": True, "message": f"Processed {updated_count} updates, {deleted_count} deletions"}), 200
+        print(f"✅ تم معالجة {updated_count} تحديث بنجاح")
+        return jsonify({"success": True, "message": f"Processed {updated_count} updates"}), 200
         
     except Exception as e:
         print(f"❌ خطأ في معالجة Webhook: {e}")
@@ -1183,9 +993,9 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "supabase_connected": supabase is not None,
+        "active_sessions": sum(len(sessions) for sessions in active_sessions.values()),
         "timestamp": datetime.now().isoformat(),
-        "pending_queue_size": len(pending_orders_queue),
-        "memory_usage": gc.get_count()
+        "pending_queue_size": len(pending_orders_queue)
     }), 200
 
 @app.route('/api/login', methods=['POST'])
@@ -1206,7 +1016,9 @@ def login():
             session['user_type'] = 'admin'
             session.permanent = True
             
-            store_session_in_db(session_id, username, {'user_type': 'admin'})
+            if username not in active_sessions:
+                active_sessions[username] = []
+            active_sessions[username].append(session_id)
             
             response = make_response(jsonify({
                 "success": True,
@@ -1229,10 +1041,9 @@ def login():
                     session['agent_name'] = agent.get('agent_name')
                     session.permanent = True
                     
-                    store_session_in_db(session_id, agent.get('agent_code'), {
-                        'user_type': 'agent',
-                        'agent_name': agent.get('agent_name')
-                    })
+                    if agent.get('agent_code') not in active_sessions:
+                        active_sessions[agent.get('agent_code')] = []
+                    active_sessions[agent.get('agent_code')].append(session_id)
                     
                     response = make_response(jsonify({
                         "success": True,
@@ -1254,9 +1065,13 @@ def login():
 def logout():
     try:
         session_id = request.cookies.get('session_id')
+        user_id = session.get('user_id')
         
-        if session_id and supabase:
-            supabase.table('active_sessions').delete().eq('session_id', session_id).execute()
+        if user_id and session_id and user_id in active_sessions:
+            if session_id in active_sessions[user_id]:
+                active_sessions[user_id].remove(session_id)
+            if not active_sessions[user_id]:
+                del active_sessions[user_id]
         
         session.clear()
         
@@ -1266,7 +1081,7 @@ def logout():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-# ============== إدارة المهام المجدولة ==============
+# ============== تشغيل المهام المجدولة (مثل الملف القديم) ==============
 _scheduler = None
 
 def start_scheduler():
@@ -1278,51 +1093,16 @@ def start_scheduler():
     
     _scheduler = BackgroundScheduler()
     
-    # مزامنة الحذف - كل 5 دقائق (بدلاً من ساعة)
+    # ✅ فقط مزامنة الحذف - نفس الكود الذي كان يعمل في الملف القديم
     _scheduler.add_job(
         func=sync_deleted_shipments, 
-        trigger=IntervalTrigger(minutes=5),
-        id='sync_deleted',
-        replace_existing=True
-    )
-    
-    # Polling للطلبات النشطة - كل 5 دقائق (بدلاً من 30 دقيقة)
-    _scheduler.add_job(
-        func=sync_active_orders_from_jenni,
-        trigger=IntervalTrigger(minutes=5),
-        id='polling_active_orders',
-        replace_existing=True
-    )
-    
-    # معالجة طابور الانتظار - كل دقيقة
-    _scheduler.add_job(
-        func=process_pending_queue,
-        trigger=IntervalTrigger(minutes=1),
-        id='process_queue',
-        replace_existing=True
-    )
-    
-    # تنظيف الجلسات المنتهية - كل 6 ساعات
-    _scheduler.add_job(
-        func=cleanup_expired_sessions,
-        trigger=IntervalTrigger(hours=6),
-        id='cleanup_sessions',
-        replace_existing=True
-    )
-    
-    # تنظيف الذاكرة - كل ساعة
-    _scheduler.add_job(
-        func=lambda: gc.collect(),
-        trigger=IntervalTrigger(hours=1),
-        id='gc_collect',
-        replace_existing=True
+        trigger="interval", 
+        hours=1, 
+        id='sync_deleted'
     )
     
     _scheduler.start()
-    print("✅ تم تشغيل المجدول مع جميع المهام")
-    print("📋 مزامنة الحذف: كل 5 دقائق")
-    print("📋 Polling التحديثات: كل 5 دقائق")
-    print("📋 معالجة الطابور: كل دقيقة")
+    print("✅ تم تشغيل المجدول - سيتم مزامنة الحذف كل ساعة")
 
 def shutdown_scheduler():
     global _scheduler
@@ -1343,11 +1123,10 @@ signal.signal(signal.SIGTERM, signal_handler)
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print("=" * 50)
-    print("🚀 تشغيل نظام الثقة - النسخة المحسنة")
+    print("🚀 تشغيل نظام الثقة")
     print(f"🌐 المنفذ: {port}")
     print("=" * 50)
     
     jenni_login()
     start_scheduler()
-    
     app.run(debug=False, host='0.0.0.0', port=port)
