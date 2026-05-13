@@ -616,11 +616,17 @@ const dataHandler = {
     const allOrdersRaw = data.filter(d => d.type === 'order' || !d.type);
     allAgents = data.filter(d => d.type === 'agent');
     
-    // ✅ التعديل: المندوب يرى جميع الطلبات (بدون فلتر)
-    allOrders = allOrdersRaw;
-    
-    console.log('🔍 [DEBUG] عدد الطلبات الكلي:', allOrders.length);
-    console.log('🔍 [DEBUG] وضع المستخدم:', isAgentMode ? 'مندوب' : 'مدير');
+    // ✅ تصفية الطلبات حسب نوع المستخدم
+    if (isAgentMode && currentUser) {
+      // للمندوب: يعرض فقط طلباته
+      const currentAgentName = (currentUser.agent_name || '').trim();
+      allOrders = allOrdersRaw.filter(o => (o.agent_name || '').trim() === currentAgentName);
+      console.log('🔍 [DEBUG] وضع المندوب - طلباته فقط:', currentAgentName, 'العدد:', allOrders.length);
+    } else {
+      // للمدير: يعرض جميع الطلبات
+      allOrders = allOrdersRaw;
+      console.log('🔍 [DEBUG] وضع المدير - جميع الطلبات:', allOrders.length);
+    }
     
     updateDashboard();
     renderOrders();
@@ -819,11 +825,13 @@ function renderOrders() {
   }
   
   let filtered = [...allOrders];
+  
+  // ✅ فلتر الحالة
   if (statusFilter !== 'all') {
     filtered = filtered.filter(o => o.status === statusFilter);
   }
   
-  // البحث الذكي
+  // ✅ البحث الذكي
   if (search && search.trim() !== '') {
     const searchTerm = search.trim();
     const searchEnglish = arabicToEnglish(searchTerm);
@@ -836,47 +844,39 @@ function renderOrders() {
       const customerPhoneLower = customerPhone.toLowerCase();
       const phoneDigits = extractDigits(customerPhone);
       
-      // البحث بالاسم
       if (customerName.includes(searchTerm)) return true;
       if (customerName.includes(searchEnglish)) return true;
       if (customerName.includes(searchArabic)) return true;
-      
-      // البحث برقم الهاتف (نصياً)
       if (customerPhoneLower.includes(searchTerm)) return true;
       if (customerPhoneLower.includes(searchEnglish)) return true;
       if (customerPhoneLower.includes(searchArabic)) return true;
-      
-      // البحث بالأرقام فقط (الميزة الأساسية)
       if (searchDigits.length >= 3 && phoneDigits.includes(searchDigits)) return true;
       return false;
     });
   }
   
-  // تصفية طلبات اليوم
+  // ✅ فلتر طلبات اليوم
   if (todayFilterActive) {
     const today = new Date().toISOString().split('T')[0];
     filtered = filtered.filter(o => {
       const orderDate = o.order_date ? o.order_date : (o.created_at ? new Date(o.created_at).toISOString().split('T')[0] : '');
       return orderDate === today;
     });
-    if (filtered.length === 0 && search === '' && statusFilter === 'all') {
-      const container = document.getElementById('ordersTableBody');
-      if (container) {
-        container.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات لهذا اليوم<\/td><\/tr>';
-      }
-      return;
-    }
   }
   
+  // ✅ ترتيب من الأحدث إلى الأقدم
   filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  
   const tbody = document.getElementById('ordersTableBody');
   if (!tbody) return;
   
-  if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات مطابقة للبحث<\/td><\/tr>';
+  // ✅ إذا لا توجد نتائج
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات مطابقة<\/td><\/tr>';
     return;
   }
   
+  // ✅ بناء الجدول
   let htmlRows = '';
   for (let i = 0; i < filtered.length; i++) {
     const o = filtered[i];
