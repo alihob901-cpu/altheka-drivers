@@ -33,6 +33,7 @@
     .status-قيد { background: #78350f; color: #fcd34d; }
     .status-جديد { background: #1e3a5f; color: #93c5fd; }
     .status-ملغي { background: #4a044e; color: #d8b4fe; }
+    .status-مؤجل { background: #9a3412; color: #fed7aa; }
     .modal-overlay { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
     .agent-card { cursor: pointer; transition: all 0.2s; }
     .agent-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
@@ -76,7 +77,7 @@ const firebaseConfig = {
 const VAPID_KEY = "BA2ONQejtLqvY0xKKIy0WaG3SAc1CCVm1xqvUhHI1gzxxlqGq65sGei8OroEqAK1haxQygk_2cp8Ugf-jyt3tWA";
 const DEFAULT_AGENT_PROFIT = 1000;
 
-// ✅ قائمة المحافظات الكاملة (تمت إضافة السليمانية ودهوك)
+// قائمة المحافظات الكاملة
 const FALLBACK_GOVERNORATES = ['بغداد', 'البصرة', 'نينوى', 'أربيل', 'النجف', 'كركوك', 'الأنبار', 'كربلاء', 'ذي قار', 'ميسان', 'بابل', 'واسط', 'صلاح الدين', 'ديالى', 'المثنى', 'القادسية', 'السليمانية', 'دهوك'];
 
 firebase.initializeApp(firebaseConfig);
@@ -94,8 +95,8 @@ async function saveTokenToServer(token) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: userId, fcm_token: token })
         });
-        if (response.ok) console.log('✅ تم حفظ FCM Token');
-    } catch (error) { console.error('❌ خطأ:', error); }
+        if (response.ok) console.log('تم حفظ FCM Token');
+    } catch (error) { console.error('خطأ:', error); }
 }
 
 async function requestNotificationPermission() {
@@ -112,7 +113,7 @@ async function requestNotificationPermission() {
         if (typeof addNotification === 'function') addNotification(payload.notification?.title || 'تنبيه', payload.notification?.body || 'لديك إشعار جديد', 'firebase');
       });
     }
-  } catch (error) { console.error('❌ خطأ:', error); }
+  } catch (error) { console.error('خطأ:', error); }
 }
 
 function saveLoginState() {
@@ -150,13 +151,13 @@ async function loadGovernorates() {
             if (governorates && governorates.length > 0) {
                 select.innerHTML = '<option value="">اختر المحافظة</option>' + 
                     governorates.map(g => `<option value="${g}">${g}</option>`).join('');
-                console.log('✅ تم تحميل المحافظات من الخادم');
+                console.log('تم تحميل المحافظات من الخادم');
                 return;
             }
         }
         throw new Error('فشل جلب المحافظات');
     } catch (error) {
-        console.log('⚠️ استخدام المحافظات المحلية:', error);
+        console.log('استخدام المحافظات المحلية:', error);
         select.innerHTML = '<option value="">اختر المحافظة</option>' + 
             FALLBACK_GOVERNORATES.map(g => `<option value="${g}">${g}</option>`).join('');
     }
@@ -187,7 +188,7 @@ async function syncWithJenni() {
             showToast('❌ فشل المزامنة: ' + (result.error || 'خطأ غير معروف'));
         }
     } catch (error) {
-        console.error('❌ خطأ في المزامنة:', error);
+        console.error('خطأ في المزامنة:', error);
         showToast('❌ حدث خطأ أثناء المزامنة');
     }
 }
@@ -365,7 +366,7 @@ async function confirmSettleAgent() {
       <div class="bg-slate-900 border border-slate-800 rounded-xl"><div class="p-4 border-b border-slate-800"><h3 class="font-700">طلباتي الأخيرة</h3></div><div id="agentRecentOrdersList" class="divide-y divide-slate-800"></div></div>
     </div>
 
-    <!-- Orders Page with Today Button -->
+    <!-- Orders Page -->
     <div id="page-orders" class="page-content p-6 fade-in hidden">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div class="flex items-center gap-2">
@@ -376,6 +377,7 @@ async function confirmSettleAgent() {
             <option value="واصل">واصل</option>
             <option value="راجع">راجع</option>
             <option value="ملغي">ملغي</option>
+            <option value="مؤجل">مؤجل</option>
           </select>
           <button id="todayOrdersBtn" onclick="toggleTodayFilter()" class="px-4 py-2 rounded-lg text-sm font-700 transition flex items-center gap-2 today-btn-inactive">
             <i data-lucide="calendar" style="width:16px;height:16px"></i> طلبات اليوم
@@ -383,7 +385,7 @@ async function confirmSettleAgent() {
         </div>
         <input id="searchOrders" oninput="renderOrders()" type="text" placeholder="بحث بالاسم أو الهاتف..." class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300 w-56">
       </div>
-      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody></table></div></div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">#</th><th class="text-right px-4 py-3">الزبون</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">المنتج</th><th class="text-right px-4 py-3">المبلغ</th><th class="text-right px-4 py-3">ربحي</th><th class="text-right px-4 py-3">المندوب</th><th class="text-right px-4 py-3">التاريخ</th><th class="text-right px-4 py-3">الحالة</th><th class="text-right px-4 py-3">الملاحظات</th><th class="text-right px-4 py-3">إجراءات</th></tr></thead><tbody id="ordersTableBody" class="divide-y divide-slate-800"></tbody></td></div></div>
     </div>
 
     <!-- Agents Page -->
@@ -609,18 +611,27 @@ async function cancelInJenni(shipmentNumber, reason) {
   }
 }
 
-// ============== DATA SDK ==============
+// ============== DATA SDK - تم التعديل هنا ==============
 const dataHandler = {
   onDataChanged(data) {
     console.log("🔔 [DATA] تحديث البيانات");
     const allOrdersRaw = data.filter(d => d.type === 'order' || !d.type);
     allAgents = data.filter(d => d.type === 'agent');
+    
+    // ✅ كود التشخيص المضافة
+    console.log('🔍 [DEBUG] جميع الطلبات المستلمة:', allOrdersRaw.map(o => ({ id: o.__backendId, name: o.customer_name, status: o.status, agent: o.agent_name })));
+    console.log('🔍 [DEBUG] هل الطلب 1778657796206 موجود؟', allOrdersRaw.some(o => o.__backendId === '1778657796206'));
+    console.log('🔍 [DEBUG] وضع المندوب:', isAgentMode, 'المستخدم الحالي:', currentUser?.agent_name);
+    
     if (isAgentMode && currentUser) {
       const currentAgentName = (currentUser.agent_name || '').trim();
       allOrders = allOrdersRaw.filter(o => (o.agent_name || '').trim() === currentAgentName);
+      console.log('🔍 [DEBUG] وضع المندوب - تم التصفية لـ:', currentAgentName, 'الطلبات الناتجة:', allOrders.length);
     } else {
       allOrders = allOrdersRaw;
+      console.log('🔍 [DEBUG] وضع الأدمن - جميع الطلبات:', allOrders.length);
     }
+    
     updateDashboard();
     renderOrders();
     if (!isAgentMode) {
@@ -725,7 +736,7 @@ function updateAgentDashboard() {
   const agentOrders = allOrders.filter(o => (o.agent_name || '').trim() === currentAgentName);
   const total = agentOrders.length;
   const delivered = agentOrders.filter(o => o.status === 'واصل').length;
-  const pending = agentOrders.filter(o => o.status === 'قيد التوصيل').length;
+  const pending = agentOrders.filter(o => o.status === 'قيد التوصيل' || o.status === 'مؤجل').length;
   const returned = agentOrders.filter(o => o.status === 'راجع').length;
   const totalProfit = agentOrders.filter(o => o.status === 'واصل').reduce((s, o) => s + (o.profit || 0), 0);
   
@@ -739,7 +750,7 @@ function updateAgentDashboard() {
   const container = document.getElementById('agentRecentOrdersList');
   if (container) { 
     if (!recent.length) container.innerHTML = '<div class="p-8 text-center text-slate-600">📭 لا توجد طلبات</div>'; 
-    else container.innerHTML = recent.map(o => `<div class="flex justify-between px-5 py-4 border-b border-slate-800"><div><p class="font-700">${escapeHtml(o.customer_name)}</p><p class="text-xs text-slate-500">${escapeHtml(o.product)}</p></div><div class="text-right"><p class="text-emerald-400">${(o.total||0).toLocaleString('ar-IQ')} د.ع</p><span class="inline-block px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}">${o.status}</span></div></div>`).join(''); 
+    else container.innerHTML = recent.map(o => `<div class="flex justify-between px-5 py-4 border-b border-slate-800"><div><p class="font-700">${escapeHtml(o.customer_name)}</p><p class="text-xs text-slate-500">${escapeHtml(o.product)}</p></div><div class="text-right"><p class="text-emerald-400">${(o.total||0).toLocaleString('ar-IQ')} د.ع</p><span class="inline-block px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status === 'مؤجل' ? 'مؤجل' : o.status}">${o.status}</span></div></div>`).join(''); 
   }
 }
 
@@ -758,7 +769,7 @@ function updateAdminDashboard() {
   const container = document.getElementById('recentOrdersList');
   if (container) { 
     if (!recent.length) container.innerHTML = '<div class="p-8 text-center text-slate-600">📭 لا توجد طلبات</div>'; 
-    else container.innerHTML = recent.map(o => `<div class="flex justify-between px-4 py-3 border-b border-slate-800"><div><p>${escapeHtml(o.customer_name)}</p><p class="text-xs text-slate-500">${escapeHtml(o.product)} · ${escapeHtml(o.agent_name)}</p></div><div class="flex gap-3"><span>${(o.total||0).toLocaleString('ar-IQ')} د.ع</span><span class="px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status}">${o.status}</span></div></div>`).join(''); 
+    else container.innerHTML = recent.map(o => `<div class="flex justify-between px-4 py-3 border-b border-slate-800"><div><p>${escapeHtml(o.customer_name)}</p><p class="text-xs text-slate-500">${escapeHtml(o.product)} · ${escapeHtml(o.agent_name)}</p></div><div class="flex gap-3"><span>${(o.total||0).toLocaleString('ar-IQ')} د.ع</span><span class="px-2 py-0.5 rounded-full text-xs status-${o.status === 'قيد التوصيل' ? 'قيد' : o.status === 'مؤجل' ? 'مؤجل' : o.status}">${o.status}</span></div></div>`).join(''); 
   }
   
   const agents = {};
@@ -835,17 +846,12 @@ function renderOrders() {
       const customerPhoneLower = customerPhone.toLowerCase();
       const phoneDigits = extractDigits(customerPhone);
       
-      // البحث بالاسم
       if (customerName.includes(searchTerm)) return true;
       if (customerName.includes(searchEnglish)) return true;
       if (customerName.includes(searchArabic)) return true;
-      
-      // البحث برقم الهاتف (نصياً)
       if (customerPhoneLower.includes(searchTerm)) return true;
       if (customerPhoneLower.includes(searchEnglish)) return true;
       if (customerPhoneLower.includes(searchArabic)) return true;
-      
-      // البحث بالأرقام فقط (الميزة الأساسية)
       if (searchDigits.length >= 3 && phoneDigits.includes(searchDigits)) return true;
       return false;
     });
@@ -861,7 +867,7 @@ function renderOrders() {
     if (filtered.length === 0 && search === '' && statusFilter === 'all') {
       const container = document.getElementById('ordersTableBody');
       if (container) {
-        container.innerHTML = '<tr><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات لهذا اليوم<\/td><\/tr>';
+        container.innerHTML = '<td><td colspan="12" class="text-center py-8 text-slate-500">📭 لا توجد طلبات لهذا اليوم<\/td><\/tr>';
       }
       return;
     }
@@ -897,7 +903,7 @@ function renderOrders() {
     const productName = (o.product || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     const productInfo = o.product_info ? (o.product_info || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '';
     const productDisplay = productInfo ? productInfo : productName + ' ×' + o.quantity;
-    let statusClass = 'status-' + (o.status === 'قيد التوصيل' ? 'قيد' : o.status);
+    let statusClass = 'status-' + (o.status === 'قيد التوصيل' ? 'قيد' : (o.status === 'مؤجل' ? 'مؤجل' : o.status));
     const customerPhoneEscaped = (o.customer_phone || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     const customerNameEscaped = (o.customer_name || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     const agentNameEscaped = (o.agent_name || 'مندوب').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -974,7 +980,7 @@ function renderCustomers() {
   allOrders.forEach(o => { const key = o.customer_phone; if (!customers[key]) customers[key] = { name: o.customer_name, phone: o.customer_phone, address: o.customer_address, orders: 0, total: 0 }; customers[key].orders++; if (o.status === 'واصل') customers[key].total += (o.total || 0); });
   const el = document.getElementById('customersDetail'); if (!el) return; const keys = Object.keys(customers);
   if (!keys.length) { el.innerHTML = '<div class="text-center text-slate-600 p-8">👥 لا يوجد عملاء</div>'; return; }
-  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th><tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
+  el.innerHTML = `<div class="overflow-x-auto"><table class="w-full"><thead class="bg-slate-800/50"><tr><th class="text-right px-4 py-3">الاسم</th><th class="text-right px-4 py-3">الهاتف</th><th class="text-right px-4 py-3">العنوان</th><th class="text-right px-4 py-3">الطلبات</th><th class="text-right px-4 py-3">المشتريات</th></tr></thead><tbody>${keys.map(k => { const c = customers[k]; return `<tr class="border-b border-slate-800"><td class="px-4 py-3">${escapeHtml(c.name)}<\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.phone)}")' title="انقر لنسخ الرقم">📞 ${escapeHtml(c.phone)}<\/span><\/td><td class="px-4 py-3"><span class="copyable cursor-pointer text-slate-400 hover:text-emerald-400 transition" onclick='copyToClipboard("${escapeHtml(c.address || '')}")' title="انقر لنسخ العنوان">📍 ${escapeHtml(c.address ? (c.address.length > 30 ? c.address.substring(0,30)+'...' : c.address) : '-')}<\/span><\/td><td class="px-4 py-3 text-center">${c.orders}<\/td><td class="px-4 py-3 text-emerald-400">${c.total.toLocaleString('ar-IQ')} د.ع<\/td><\/tr>`; }).join('')}</tbody></table><\/div>`;
 }
 
 function renderInventory() {
@@ -1190,9 +1196,9 @@ function openStatusModal(id) {
   
   let statuses = [];
   if (isAgentMode && currentUser && currentUser.type !== 'admin') {
-    statuses = ['قيد التوصيل', 'راجع', 'ملغي'];
+    statuses = ['قيد التوصيل', 'راجع', 'ملغي', 'مؤجل'];
   } else {
-    statuses = ['جديد', 'قيد التوصيل', 'واصل', 'راجع', 'ملغي'];
+    statuses = ['جديد', 'قيد التوصيل', 'واصل', 'راجع', 'ملغي', 'مؤجل'];
   }
   
   const statusOptionsHtml = statuses.map(s => `
@@ -1201,7 +1207,7 @@ function openStatusModal(id) {
                    ${pendingStatusRecord.status === s ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50' : 'bg-slate-800/50'}"
             style="font-size: 16px;">
         <div class="flex justify-between items-center">
-            <span>${s === 'قيد التوصيل' ? '🚚 ' + s : s === 'واصل' ? '✅ ' + s : s === 'راجع' ? '↩️ ' + s : s === 'ملغي' ? '❌ ' + s : '📋 ' + s}</span>
+            <span>${s === 'قيد التوصيل' ? '🚚 ' + s : s === 'واصل' ? '✅ ' + s : s === 'راجع' ? '↩️ ' + s : s === 'ملغي' ? '❌ ' + s : s === 'جديد' ? '📋 ' + s : s === 'مؤجل' ? '📅 ' + s : '📌 ' + s}</span>
             ${pendingStatusRecord.status === s ? '<i data-lucide="check" style="width:18px;height:18px"></i>' : ''}
         </div>
     </button>
