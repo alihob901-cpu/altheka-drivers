@@ -615,12 +615,13 @@ const dataHandler = {
     console.log("🔔 [DATA] تحديث البيانات");
     const allOrdersRaw = data.filter(d => d.type === 'order' || !d.type);
     allAgents = data.filter(d => d.type === 'agent');
-    if (isAgentMode && currentUser) {
-      const currentAgentName = (currentUser.agent_name || '').trim();
-      allOrders = allOrdersRaw.filter(o => (o.agent_name || '').trim() === currentAgentName);
-    } else {
-      allOrders = allOrdersRaw;
-    }
+    
+    // ✅ التعديل: المندوب يرى جميع الطلبات (بدون فلتر)
+    allOrders = allOrdersRaw;
+    
+    console.log('🔍 [DEBUG] عدد الطلبات الكلي:', allOrders.length);
+    console.log('🔍 [DEBUG] وضع المستخدم:', isAgentMode ? 'مندوب' : 'مدير');
+    
     updateDashboard();
     renderOrders();
     if (!isAgentMode) {
