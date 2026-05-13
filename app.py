@@ -656,13 +656,16 @@ def sync_deleted_shipments():
                     if not result.get('shipments'):
                         supabase.table('orders').delete().eq('__backendId', order['__backendId']).execute()
                         deleted_count += 1
-                        print(f"🗑️ تم حذف الطلب {order['__backendId']}")
+                        print(f"🗑️ تم حذف الطلب {order['__backendId']} (غير موجود في الزعيم)")
             except Exception as e:
-                print(f"❌ خطأ في استعلام الشحنة: {e}")
+                print(f"❌ خطأ في استعلام الشحنة {order['__backendId']}: {e}")
                 continue
         
         if deleted_count > 0:
-            add_notification_to_db('مزامنة مع الزعيم', f'تم حذف {deleted_count} طلب', 'status')
+            add_notification_to_db('مزامنة مع الزعيم', f'تم حذف {deleted_count} طلب غير موجود في الزعيم', 'status')
+            print(f"✅ [SYNC] تم حذف {deleted_count} طلب غير موجود في الزعيم")
+        else:
+            print(f"✅ [SYNC] لا توجد طلبات محذوفة في الزعيم")
             
     except Exception as e:
         print(f"❌ خطأ في مزامنة الحذف: {e}")
@@ -691,7 +694,7 @@ def sync_active_orders_from_jenni():
         active_orders = [o for o in active_orders if o.get('jenni_shipment_id')]
         
         if not active_orders:
-            print("📭 لا توجد طلبات نشطة")
+            print("📭 لا توجد طلبات نشطة للمزامنة")
             return
         
         print(f"📋 تم العثور على {len(active_orders)} طلب نشط")
@@ -706,6 +709,7 @@ def sync_active_orders_from_jenni():
         }
         
         updated_count = 0
+        deleted_count = 0
         
         for order in active_orders:
             try:
@@ -718,35 +722,89 @@ def sync_active_orders_from_jenni():
                 
                 if response.status_code == 200:
                     result = response.json()
-                    for shipment in result.get('shipments', []):
-                        current_step = shipment.get('current_step')
-                        new_status = status_map.get(current_step)
-                        
-                        if new_status and order.get('status') != new_status:
-                            supabase.table('orders').update({
-                                "status": new_status,
-                                "updated_at": datetime.now().isoformat(),
-                                "jenni_last_update": datetime.now().isoformat()
-                            }).eq('__backendId', order['__backendId']).execute()
+                    shipments = result.get('shipments', [])
+                    
+                    if not shipments:
+                        # الطلب غير موجود في الزعيم - يجب حذفه
+                        supabase.table('orders').delete().eq('__backendId', order['__backendId']).execute()
+                        deleted_count += 1
+                        print(f"🗑️ [POLLING] تم حذف الطلب {order['__backendId']} (غير موجود في الزعيم)")
+                    else:
+                        for shipment in shipments:
+                            current_step = shipment.get('current_step')
+                            new_status = status_map.get(current_step)
                             
-                            updated_count += 1
-                            print(f"✅ تم تحديث الطلب {order['__backendId']} إلى {new_status}")
-                            
+                            if new_status and order.get('status') != new_status:
+                                supabase.table('orders').update({
+                                    "status": new_status,
+                                    "updated_at": datetime.now().isoformat(),
+                                    "jenni_last_update": datetime.now().isoformat()
+                                }).eq('__backendId', order['__backendId']).execute()
+                                
+                                updated_count += 1
+                                print(f"✅ [POLLING] تم تحديث الطلب {order['__backendId']} من {order['status']} إلى {new_status}")
+                                
             except Exception as e:
+                print(f"❌ خطأ في استعلام الشحنة {order['__backendId']}: {e}")
                 continue
         
         if updated_count > 0:
-            print(f"✅ تم تحديث {updated_count} طلب")
+            print(f"✅ [POLLING] تم تحديث {updated_count} طلب")
+        if deleted_count > 0:
+            print(f"🗑️ [POLLING] تم حذف {deleted_count} طلب غير موجود في الزعيم")
+        if updated_count == 0 and deleted_count == 0:
+            print("📭 [POLLING] لا توجد تحديثات جديدة")
             
     except Exception as e:
-        print(f"❌ خطأ في المزامنة: {e}")
+        print(f"❌ خطأ في مزامنة الطلبات النشطة: {e}")
 
 @app.route('/api/sync-with-jenni', methods=['POST'])
 def sync_with_jenni():
     try:
+        print("🔄 [API] بدء مزامنة يدوية...")
         sync_deleted_shipments()
         return jsonify({"success": True, "message": "تمت المزامنة بنجاح"})
     except Exception as e:
+        print(f"❌ خطأ في المزامنة: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# ============== Webhook لاستقبال إشعارات الحذف من الزعيم ==============
+@app.route('/api/webhook/shipment-deleted', methods=['POST'])
+def webhook_shipment_deleted():
+    """يتم استدعاؤها من نظام الزعيم عند حذف شحنة"""
+    try:
+        data = request.get_json()
+        print(f"📬 [WEBHOOK] استلام إشعار حذف من الزعيم: {data}")
+        
+        shipment_id = data.get('shipment_id')
+        shipment_number = data.get('shipment_number')
+        
+        if not shipment_id and not shipment_number:
+            return jsonify({"success": False, "error": "No shipment identifier"}), 400
+        
+        # البحث عن الطلب في قاعدة البيانات
+        if supabase:
+            if shipment_number:
+                order = supabase.table('orders').select('*').eq('__backendId', shipment_number).execute()
+            elif shipment_id:
+                order = supabase.table('orders').select('*').eq('jenni_shipment_id', str(shipment_id)).execute()
+            else:
+                return jsonify({"success": False, "error": "No identifier"}), 400
+            
+            if order.data:
+                # حذف الطلب من قاعدة البيانات
+                supabase.table('orders').delete().eq('__backendId', order.data[0]['__backendId']).execute()
+                print(f"✅ [WEBHOOK] تم حذف الطلب {shipment_number or shipment_id} من قاعدة البيانات")
+                add_notification_to_db('حذف من الزعيم', f'تم حذف طلب {order.data[0].get("customer_name", "زبون")} من نظام الزعيم', 'status')
+                return jsonify({"success": True, "message": "Order deleted"})
+            else:
+                print(f"⚠️ [WEBHOOK] الطلب {shipment_number or shipment_id} غير موجود في قاعدة البيانات")
+                return jsonify({"success": True, "message": "Order not found"})
+        
+        return jsonify({"success": False, "error": "No database connection"}), 500
+        
+    except Exception as e:
+        print(f"❌ خطأ في webhook: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 # ============== دوال الإشعارات ==============
@@ -986,11 +1044,20 @@ def jenni_webhook():
         }
         
         updated_count = 0
+        deleted_count = 0
         
         for update in updates:
             shipment_number = update.get('shipment_number')
             current_step = update.get('current_step')
             note = update.get('note')
+            
+            # إذا كان الإجراء حذف
+            if current_step == 'DELETED':
+                if supabase and shipment_number:
+                    supabase.table('orders').delete().eq('__backendId', shipment_number).execute()
+                    deleted_count += 1
+                    print(f"🗑️ تم حذف الطلب {shipment_number} من قاعدة البيانات (webhook)")
+                continue
             
             new_status = status_map.get(current_step)
             
@@ -1006,7 +1073,12 @@ def jenni_webhook():
                     updated_count += 1
                     print(f"✅ تم تحديث الطلب {shipment_number} إلى {new_status}")
         
-        return jsonify({"success": True, "message": f"Processed {updated_count} updates"}), 200
+        if deleted_count > 0:
+            print(f"🗑️ تم حذف {deleted_count} طلب من قاعدة البيانات")
+        if updated_count > 0:
+            print(f"✅ تم تحديث {updated_count} طلب")
+        
+        return jsonify({"success": True, "message": f"Processed {updated_count} updates, {deleted_count} deletions"}), 200
         
     except Exception as e:
         print(f"❌ خطأ في معالجة Webhook: {e}")
@@ -1206,27 +1278,31 @@ def start_scheduler():
     
     _scheduler = BackgroundScheduler()
     
+    # مزامنة الحذف - كل 5 دقائق (بدلاً من ساعة)
     _scheduler.add_job(
         func=sync_deleted_shipments, 
-        trigger=IntervalTrigger(hours=1),
+        trigger=IntervalTrigger(minutes=5),
         id='sync_deleted',
         replace_existing=True
     )
     
+    # Polling للطلبات النشطة - كل 5 دقائق (بدلاً من 30 دقيقة)
     _scheduler.add_job(
         func=sync_active_orders_from_jenni,
-        trigger=IntervalTrigger(minutes=30),
+        trigger=IntervalTrigger(minutes=5),
         id='polling_active_orders',
         replace_existing=True
     )
     
+    # معالجة طابور الانتظار - كل دقيقة
     _scheduler.add_job(
         func=process_pending_queue,
-        trigger=IntervalTrigger(minutes=5),
+        trigger=IntervalTrigger(minutes=1),
         id='process_queue',
         replace_existing=True
     )
     
+    # تنظيف الجلسات المنتهية - كل 6 ساعات
     _scheduler.add_job(
         func=cleanup_expired_sessions,
         trigger=IntervalTrigger(hours=6),
@@ -1234,6 +1310,7 @@ def start_scheduler():
         replace_existing=True
     )
     
+    # تنظيف الذاكرة - كل ساعة
     _scheduler.add_job(
         func=lambda: gc.collect(),
         trigger=IntervalTrigger(hours=1),
@@ -1243,6 +1320,9 @@ def start_scheduler():
     
     _scheduler.start()
     print("✅ تم تشغيل المجدول مع جميع المهام")
+    print("📋 مزامنة الحذف: كل 5 دقائق")
+    print("📋 Polling التحديثات: كل 5 دقائق")
+    print("📋 معالجة الطابور: كل دقيقة")
 
 def shutdown_scheduler():
     global _scheduler
