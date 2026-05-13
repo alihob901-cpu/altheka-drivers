@@ -698,23 +698,36 @@ async function handleLogin(e) {
 }
 
 function showApp() {
-  document.getElementById('loginPage').classList.add('hidden'); document.getElementById('app').classList.remove('hidden');
+  document.getElementById('loginPage').classList.add('hidden'); 
+  document.getElementById('app').classList.remove('hidden');
   if (isAgentMode) {
-    document.getElementById('dashboardNav').classList.add('hidden'); document.getElementById('agentDashboardNav').classList.remove('hidden');
-    document.getElementById('agentsNav').classList.add('hidden'); document.getElementById('customersNav').classList.add('hidden');
-    document.getElementById('inventoryNav').classList.add('hidden'); document.getElementById('reportsNav').classList.add('hidden');
-    document.getElementById('settingsNav').classList.add('hidden'); document.getElementById('addOrderBtn').classList.remove('hidden');
+    document.getElementById('dashboardNav').classList.add('hidden'); 
+    document.getElementById('agentDashboardNav').classList.remove('hidden');
+    document.getElementById('agentsNav').classList.add('hidden'); 
+    document.getElementById('customersNav').classList.add('hidden');
+    document.getElementById('inventoryNav').classList.add('hidden'); 
+    document.getElementById('reportsNav').classList.add('hidden');
+    document.getElementById('settingsNav').classList.add('hidden'); 
+    document.getElementById('addOrderBtn').classList.remove('hidden');
     document.getElementById('syncWithJenniBtn').classList.add('hidden');
-    document.getElementById('userName').textContent = currentUser.agent_name; document.getElementById('userRole').textContent = 'مندوب';
-    document.getElementById('userAvatar').textContent = currentUser.agent_name.charAt(0); switchPage('agent-dashboard');
+    document.getElementById('userName').textContent = currentUser.agent_name; 
+    document.getElementById('userRole').textContent = 'مندوب';
+    document.getElementById('userAvatar').textContent = currentUser.agent_name.charAt(0); 
+    switchPage('agent-dashboard');
   } else {
-    document.getElementById('dashboardNav').classList.remove('hidden'); document.getElementById('agentDashboardNav').classList.add('hidden');
-    document.getElementById('agentsNav').classList.remove('hidden'); document.getElementById('customersNav').classList.remove('hidden');
-    document.getElementById('inventoryNav').classList.remove('hidden'); document.getElementById('reportsNav').classList.remove('hidden');
-    document.getElementById('settingsNav').classList.remove('hidden'); document.getElementById('addOrderBtn').classList.add('hidden');
+    document.getElementById('dashboardNav').classList.remove('hidden'); 
+    document.getElementById('agentDashboardNav').classList.add('hidden');
+    document.getElementById('agentsNav').classList.remove('hidden'); 
+    document.getElementById('customersNav').classList.remove('hidden');
+    document.getElementById('inventoryNav').classList.remove('hidden'); 
+    document.getElementById('reportsNav').classList.remove('hidden');
+    document.getElementById('settingsNav').classList.remove('hidden'); 
+    document.getElementById('addOrderBtn').classList.add('hidden');
     document.getElementById('syncWithJenniBtn').classList.remove('hidden');
-    document.getElementById('userName').textContent = 'المدير العام'; document.getElementById('userRole').textContent = 'مسؤول النظام';
-    document.getElementById('userAvatar').textContent = 'م'; switchPage('dashboard');
+    document.getElementById('userName').textContent = 'المدير العام'; 
+    document.getElementById('userRole').textContent = 'مسؤول النظام';
+    document.getElementById('userAvatar').textContent = 'م'; 
+    switchPage('dashboard');
   }
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
